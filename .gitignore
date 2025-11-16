@@ -49,6 +49,49 @@ coverage.xml
 .pytest_cache/
 cover/
 
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# pdm
+.pdm.toml
+
+# PEP 582
+__pypackages__/
+
 # Environments
 .env
 .venv
@@ -57,6 +100,27 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
 
 # IDEs
 .vscode/
@@ -73,6 +137,7 @@ venv.bak/
 .Trashes
 ehthumbs.db
 Thumbs.db
+Desktop.ini
 
 # Hidden files/folders (except essential ones)
 .*
@@ -83,6 +148,11 @@ Thumbs.db
 .mcp.json
 *.mcp.json
 
+# OAuth credentials (for gemini-cli and qwen-code)
+.gemini/
+.qwen/
+oauth_creds.json
+
 # Project specific
 CLAUDE.md
 local/
@@ -91,6 +161,10 @@ secrets.py
 uv.lock
 tests/
 test_files/
+test_output/
+*.tmp
+*.temp
+
 # API Keys - NEVER commit these
 api-keys.txt
 **/api-keys.txt

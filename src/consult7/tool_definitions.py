@@ -15,6 +15,13 @@ class ToolDescriptions:
             '"x-ai/grok-4" (Grok 4, 256k context)',
             '"x-ai/grok-4-fast" (Grok 4 Fast, 2M context)',
         ],
+        "gemini-cli": [
+            '"gemini-2.5-flash" (Fast response ~2s, 1M context, OAuth free)',
+            '"gemini-2.5-pro" (High quality ~25s, 1M context, OAuth free)',
+        ],
+        "qwen-code": [
+            '"qwen3-coder-plus" (Code-focused, 128k context, OAuth only)',
+        ],
     }
 
     @classmethod
@@ -31,9 +38,11 @@ TIPS:
 - Long instructions: Put them in a file, include in files list, keep query short
 
 Quick mnemonics:
-- gptt = openai/gpt-5.1 + think (latest GPT, deep reasoning)
-- gemt = google/gemini-2.5-pro + think (Gemini Pro, deep reasoning)
-- gemf = google/gemini-2.5-flash-lite + fast (ultra fast)
+- gptt = openai/gpt-5.1 + think (latest GPT, deep reasoning) [OpenRouter]
+- gemt = google/gemini-2.5-pro + think (Gemini Pro, deep reasoning) [OpenRouter]
+- gemf = google/gemini-2.5-flash-lite + fast (ultra fast) [OpenRouter]
+- gcli = gemini-2.5-flash + mid (OAuth, free tier) [Gemini CLI]
+- qwen = qwen-coder-turbo-latest + fast (OAuth, code-focused) [Qwen Code]
 
 {provider_notes}
 

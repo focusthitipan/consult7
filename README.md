@@ -1,6 +1,14 @@
 # Consult7 MCP Server
 
-**Consult7** is a Model Context Protocol (MCP) server that enables AI agents to consult large context window models via [OpenRouter](https://openrouter.ai) for analyzing extensive file collections - entire codebases, document repositories, or mixed content that exceed the current agent's context limits.
+**Consult7** is a Model Context Protocol (MCP) server that enables AI agents to consult large context window models for analyzing extensive file collections - entire codebases, document repositories, or mixed content that exceed the current agent's context limits.
+
+## Supported Providers
+
+Consult7 supports 3 providers:
+
+1. **OpenRouter** - Access to 500+ models via API key
+2. **Gemini CLI** - Google Gemini models via OAuth (free tier, no API key needed)
+3. **Qwen Code** - Alibaba Qwen models via OAuth (code-focused)
 
 ## Why Consult7?
 
@@ -9,6 +17,7 @@
 - Task requires specialized model capabilities
 - Need to analyze large codebases in a single query
 - Want to compare results from different models
+- Want to use free OAuth-based providers (Gemini CLI, Qwen Code)
 
 > "For Claude Code users, Consult7 is a game changer."
 
@@ -41,17 +50,15 @@
 
 ## Installation
 
-### Claude Code
+### Option 1: OpenRouter (Recommended for most users)
 
-Simply run:
+#### Claude Code
 
 ```bash
-claude mcp add -s user consult7 uvx -- consult7 your-openrouter-api-key
+claude mcp add -s user consult7 uvx -- consult7 openrouter your-openrouter-api-key
 ```
 
-### Claude Desktop
-
-Add to your Claude Desktop configuration file:
+#### Claude Desktop
 
 ```json
 {
@@ -59,30 +66,109 @@ Add to your Claude Desktop configuration file:
     "consult7": {
       "type": "stdio",
       "command": "uvx",
-      "args": ["consult7", "your-openrouter-api-key"]
+      "args": ["consult7", "openrouter", "your-openrouter-api-key"]
     }
   }
 }
 ```
 
-Replace `your-openrouter-api-key` with your actual OpenRouter API key.
+> **💡 Local Development Tip:**
+> - `uvx consult7` → Uses package from PyPI (production)
+> - `consult7` → Uses local install from `pip install -e .` (development)
+> - After code changes, run `pip install -e .` and restart Claude Desktop
 
-No installation required - `uvx` automatically downloads and runs consult7 in an isolated environment.
+### Option 2: Gemini CLI (Free, OAuth-based)
+
+**Prerequisites**: Install and authenticate Gemini CLI tool first
+
+```bash
+npm install -g @google/generative-ai-cli
+gemini  # Login with Google account
+```
+
+#### Claude Code
+
+```bash
+claud mcp add -s user consult7-gemini consult7 -- gemini-cli oauth:
+```
+
+#### Claude Desktop
+
+```json
+{
+  "mcpServers": {
+    "consult7-gemini": {
+      "type": "stdio",
+      "command": "consult7",
+      "args": ["gemini-cli", "oauth:"]
+    }
+  }
+}
+```
+
+📖 [Gemini CLI Setup Guide](docs/GEMINI_CLI_SETUP.md)
+
+### Option 3: Qwen Code (OAuth-based, code-focused)
+
+**Prerequisites**: Requires Qwen OAuth credentials (see authentication instructions in [Setup Guide](docs/QWEN_CODE_SETUP.md))
+
+#### Claude Code
+
+```bash
+claud mcp add -s user consult7-qwen consult7 -- qwen-code oauth:
+```
+
+#### Claude Desktop
+
+```json
+{
+  "mcpServers": {
+    "consult7-qwen": {
+      "type": "stdio",
+      "command": "consult7",
+      "args": ["qwen-code", "oauth:"]
+    }
+  }
+}
+```
+
+**Note**: `oauth:` uses default path (`~/.qwen/oauth_creds.json`) automatically. For custom path: `oauth:/path/to/creds.json`
+
+📖 [Qwen Code Setup Guide](docs/QWEN_CODE_SETUP.md)
+
+---
+
+**Note**: `uvx` automatically downloads and runs consult7 in an isolated environment. No manual installation required.
 
 ## Command Line Options
 
+### OpenRouter
 ```bash
-uvx consult7 <api-key> [--test]
+consult7 openrouter <api-key> [--test]
 ```
 
-- `<api-key>`: Required. Your OpenRouter API key
-- `--test`: Optional. Test the API connection
+### Gemini CLI
+```bash
+consult7 gemini-cli oauth: [--test]                    # Use default path: ~/.gemini/oauth_creds.json
+consult7 gemini-cli oauth:/custom/path.json [--test]   # Use custom path
+```
 
-The model and mode are specified when calling the tool, not at startup.
+### Qwen Code
+```bash
+consult7 qwen-code oauth: [--test]                     # Use default path: ~/.qwen/oauth_creds.json
+consult7 qwen-code oauth:/custom/path.json [--test]    # Use custom path
+```
+
+**Options:**
+- `--test`: Test the provider connection
+- `oauth:` uses default path automatically
+- `oauth:/path/to/file` specifies custom path
 
 ## Supported Models
 
-Consult7 supports **all 500+ models** available on OpenRouter. Below are the flagship models with optimized dynamic file size limits:
+### OpenRouter (500+ models available)
+
+Flagship models with optimized dynamic file size limits:
 
 | Model | Context | Use Case |
 |-------|---------|----------|
@@ -96,6 +182,24 @@ Consult7 supports **all 500+ models** available on OpenRouter. Below are the fla
 | `x-ai/grok-4-fast` | 2M | Largest context window |
 
 You can use any OpenRouter model ID (e.g., `deepseek/deepseek-r1-0528`). See the [full model list](https://openrouter.ai/models). File size limits are automatically calculated based on each model's context window.
+
+### Gemini CLI (OAuth, Free)
+
+| Model | Context | Max Output | Use Case |
+|-------|---------|------------|----------|
+| `gemini-2.5-flash` | 1.048M | 64k | Fast responses (2s, free tier) |
+| `gemini-2.5-pro` | 1.048M | 64k | High quality analysis (free tier) |
+
+**Note**: Only Gemini 2.5 Series supported (1.5 and 1.0 not supported via OAuth)
+
+### Qwen Code (OAuth, Code-focused)
+
+| Model | Context | Max Output | Use Case |
+|-------|---------|------------|----------|
+| `qwen3-coder-plus` | 1M | 65k | High-performance code analysis (OAuth) |
+| `qwen3-coder-flash` | 1M | 65k | Fast code analysis optimized for speed (OAuth) |
+
+**Note**: Other Qwen models require API Key instead of OAuth
 
 ## Performance Modes
 
@@ -149,6 +253,7 @@ Claude Code will automatically use the tool with proper parameters:
 
 ### Via Python API
 
+**OpenRouter:**
 ```python
 from consult7.consultation import consultation_impl
 
@@ -156,17 +261,49 @@ result = await consultation_impl(
     files=["/path/to/file.py"],
     query="Explain this code",
     model="google/gemini-2.5-flash",
-    mode="mid",  # fast, mid, or think
+    mode="mid",
     provider="openrouter",
     api_key="sk-or-v1-..."
+)
+```
+
+**Gemini CLI:**
+```python
+result = await consultation_impl(
+    files=["/path/to/file.py"],
+    query="Explain this code",
+    model="gemini-2.5-flash",
+    mode="mid",
+    provider="gemini-cli",
+    api_key=None  # Use default path: ~/.gemini/oauth_creds.json
+    # or api_key="/custom/path/oauth_creds.json" for custom path
+)
+```
+
+**Qwen Code:**
+```python
+result = await consultation_impl(
+    files=["/path/to/file.py"],
+    query="Review this code",
+    model="qwen3-coder-plus",
+    mode="fast",
+    provider="qwen-code",
+    api_key=None  # Use default path: ~/.qwen/oauth_creds.json
+    # or api_key="/custom/path/oauth_creds.json" for custom path
 )
 ```
 
 ## Testing
 
 ```bash
-# Test OpenRouter connection
-uvx consult7 sk-or-v1-your-api-key --test
+# Test OpenRouter
+consult7 openrouter sk-or-v1-your-api-key --test
+
+# Test Gemini CLI
+consult7 gemini-cli oauth: --test
+
+# Test Qwen Code
+consult7 qwen-code oauth: --test
 ```
 
 ## Uninstalling

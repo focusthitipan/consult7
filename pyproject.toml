@@ -16,6 +16,9 @@ keywords = ["mcp", "llm", "code-analysis", "large-context", "openrouter"]
 dependencies = [
     "mcp>=1.9.4",
     "httpx>=0.28.1",
+    "google-auth>=2.37.0",
+    "google-auth-oauthlib>=1.2.1",
+    "openai>=1.59.0",
 ]
 
 [project.urls]

@@ -31,14 +31,16 @@ LLM_CALL_TIMEOUT = 600.0  # 10 minutes - very generous timeout for LLM calls
 SERVER_VERSION = "3.0.0"
 EXIT_SUCCESS = 0
 EXIT_FAILURE = 1
-MIN_ARGS = 1
+MIN_ARGS = 2  # provider and api-key/oauth-path
 
 # Output token constants
 DEFAULT_OUTPUT_TOKENS = 8_000  # Default max output tokens (~300 lines of code)
 SMALL_OUTPUT_TOKENS = 4_000  # Output tokens for smaller models
 SMALL_MODEL_THRESHOLD = 100_000  # Context size threshold for small models
 
-# Test model for OpenRouter
+# Test model for each provider
 TEST_MODELS = {
     "openrouter": "openai/gpt-5.1",
+    "gemini-cli": "gemini-2.5-flash",
+    "qwen-code": "qwen3-coder-plus",
 }

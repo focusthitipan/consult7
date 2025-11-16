@@ -15,6 +15,11 @@
 - Better error messages with actionable hints
 - Improved tool descriptions
 
+## Bug Fixes
+- **Gemini CLI**: Fixed HTTP 403 error by removing `cloudaicompanionProject` field from onboardUser request for FREE tier
+  - Google FREE tier auto-assigns managed project - specifying project manually causes rejection
+  - Test mode works but production fails → root cause: incorrect onboarding payload
+
 ## Migration Guide
 - Change `consult7 openrouter <key>` to `consult7 <key>`
 - Change model name from `google/gemini-2.5-pro|thinking` to `google/gemini-2.5-pro` with `mode="think"`
