@@ -101,17 +101,28 @@ def get_thinking_budget(model_name: str, mode: str) -> Optional[int]:
 
 ## Development Workflows
 
+### Prerequisites
+
+First, install the package locally:
+
+```powershell
+# Clone and install in editable mode
+git clone https://github.com/focusthitipan/consult7.git
+cd consult7
+pip install -e .
+```
+
 ### Testing API Connection
 ```powershell
 # Windows PowerShell
 # OpenRouter
-uvx consult7 openrouter sk-or-v1-your-key --test
+consult7 openrouter sk-or-v1-your-key --test
 
 # Gemini CLI (OAuth)
-uvx consult7 gemini-cli oauth: --test
+consult7 gemini-cli oauth: --test
 
 # Qwen Code (OAuth)
-uvx consult7 qwen-code oauth: --test
+consult7 qwen-code oauth: --test
 ```
 
 ### Running Locally During Development

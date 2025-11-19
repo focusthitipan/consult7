@@ -2,51 +2,54 @@
 
 ## Overview
 
-Gemini CLI provider ให้คุณใช้งาน Google Gemini models ผ่าน OAuth authentication โดยไม่ต้องใช้ API key
+The Gemini CLI provider enables you to use Google Gemini models via OAuth authentication without requiring an API key.
 
 ## Prerequisites
 
-1. ติดตั้ง Gemini CLI tool:
+1. Install the Gemini CLI tool:
    ```bash
    npm install -g @google/generative-ai-cli
    ```
 
-2. Authenticate ด้วย Google account:
+2. Authenticate with your Google account:
    ```bash
    gemini
    ```
-   - ระบบจะเปิดบราวเซอร์ให้คุณ login ด้วย Google
-   - Credentials จะถูกบันทึกที่ `~/.gemini/oauth_creds.json`
+   - The system will open a browser for you to log in with Google
+   - Credentials will be saved at `~/.gemini/oauth_creds.json`
 
 ## Supported Models
 
 - `gemini-2.5-flash` - Fast responses (context: 1.048M, max output: 64k, free tier)
-- `gemini-2.5-pro` - High quality analysis (context: 1.048M, max output: 64k, free tier)
+- `gemini-2.5-flash-lite` - Ultra fast, lightweight, cost-optimized (context: 1.048M, max output: 64k, free tier)
+- `gemini-2.5-pro` - High quality analysis with reasoning (context: 1.048M, max output: 64k, free tier)
 
-### ⚠️ ข้อจำกัด OAuth
+### ⚠️ OAuth Limitations
 
-รองรับเฉพาะ **Gemini 2.5 Series** เท่านั้น:
+Only **Gemini 2.5 Series** is supported:
 - ✅ `gemini-2.5-flash`
+- ✅ `gemini-2.5-flash-lite`
 - ✅ `gemini-2.5-pro`
 
-Models ที่ **ไม่รองรับ** (HTTP 404):
+Models that are **NOT supported** (HTTP 404):
 - ❌ `gemini-1.5-pro`
 - ❌ `gemini-1.5-flash`
 - ❌ `gemini-1.0-pro`
 - ❌ `gemini-pro`
+- ❌ `gemini-3-pro-preview` (preview not yet available)
 
 ## Usage Examples
 
 ### Command Line
 
 ```bash
-# ใช้ default OAuth path (~/.gemini/oauth_creds.json)
+# Use default OAuth path (~/.gemini/oauth_creds.json)
 consult7 gemini-cli oauth:
 
-# ระบุ custom OAuth path
+# Specify custom OAuth path
 consult7 gemini-cli oauth:~/my-custom-path/oauth_creds.json
 
-# ทดสอบการเชื่อมต่อ
+# Test the connection
 consult7 gemini-cli oauth: --test
 ```
 
@@ -75,14 +78,14 @@ result = await consultation_impl(
     model="gemini-2.5-flash",
     mode="mid",
     provider="gemini-cli",
-    api_key=None  # ใช้ default path: ~/.gemini/oauth_creds.json
-    # หรือ api_key="/custom/path/oauth_creds.json" สำหรับ custom path
+    api_key=None  # Use default path: ~/.gemini/oauth_creds.json
+    # or api_key="/custom/path/oauth_creds.json" for custom path
 )
 ```
 
 ## Features
 
-- ✅ OAuth2 authentication (ไม่ต้องใช้ API key)
+- ✅ OAuth2 authentication (no API key needed)
 - ✅ Auto token refresh
 - ✅ Project ID discovery
 - ✅ Free tier support
@@ -97,11 +100,15 @@ result = await consultation_impl(
 Error: Failed to load Gemini CLI OAuth credentials
 ```
 
-**Solution**: รัน `gemini` command ใหม่เพื่อ authenticate
+**Solution**: Run the `gemini` command again to re-authenticate
 
 ### Token Expired
 
-ระบบจะ auto-refresh token โดยอัตโนมัติ หาก refresh ไม่สำเร็จให้ authenticate ใหม่
+The system will automatically refresh the token. If refresh fails, please re-authenticate:
+
+```bash
+gemini
+```
 
 ### HTTP 403 Forbidden Error
 
@@ -109,23 +116,23 @@ Error: Failed to load Gemini CLI OAuth credentials
 Error: HTTP 403 - Access forbidden
 ```
 
-**สาเหตุที่เป็นไปได้:**
-1. ไฟล์ใหญ่เกิน context limit หรือมีเนื้อหาที่ Google ห้าม
-2. OAuth token หมดอายุ - ให้รัน `gemini` เพื่อ re-authenticate
-3. Google account ไม่มีสิทธิ์เข้าถึง Code Assist API
+**Possible causes:**
+1. File is too large for context limit or contains content that Google blocks
+2. OAuth token expired - run `gemini` to re-authenticate
+3. Google account doesn't have access to Code Assist API
 
-**Solution:**
-- ทดสอบด้วย `consult7 gemini-cli oauth: --test` ก่อน (ถ้าผ่านแสดงว่า OAuth ใช้งานได้)
-- Re-authenticate: `gemini` แล้ว login ใหม่
-- ลองใช้ไฟล์ที่เล็กกว่า หรือตัดเนื้อหาที่ไม่จำเป็นออก
-- ตรวจสอบว่า Google account มี access เข้า Gemini Code Assist
+**Solutions:**
+- Test with `consult7 gemini-cli oauth: --test` first (if it passes, OAuth is working)
+- Re-authenticate: run `gemini` and log in again
+- Try with smaller files or remove unnecessary content
+- Verify that your Google account has access to Gemini Code Assist
 
 ### Project ID Not Found
 
-ระบบจะสร้าง project ID ใหม่โดยอัตโนมัติผ่าน Google managed project (FREE tier)
+The system will automatically create a new project ID via Google managed project (FREE tier).
 
-**หมายเหตุ:** FREE tier จะถูก auto-assign managed project จาก Google โดยอัตโนมัติ ไม่ต้องระบุ project ID เอง
+**Note:** The FREE tier automatically gets assigned a managed project by Google. You don't need to specify a project ID manually.
 
 ## Cost
 
-Gemini CLI ใช้ free tier ของ Google - **ไม่มีค่าใช้จ่าย**
+Gemini CLI uses Google's free tier - **completely free**

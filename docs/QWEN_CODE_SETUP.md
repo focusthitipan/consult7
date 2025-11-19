@@ -2,28 +2,28 @@
 
 ## Overview
 
-Qwen Code provider ให้คุณใช้งาน Alibaba Qwen models ผ่าน OAuth authentication โดยไม่ต้องใช้ API key
+The Qwen Code provider enables you to use Alibaba Qwen models via OAuth authentication without requiring an API key.
 
 ## Prerequisites
 
-1. มี Qwen account และ authenticate แล้ว
-2. OAuth credentials ต้องอยู่ที่ `~/.qwen/oauth_creds.json`
+1. Have a Qwen account and be authenticated
+2. OAuth credentials must be located at `~/.qwen/oauth_creds.json`
 
 ## Authentication Setup
 
-### วิธีที่ 1: ใช้ Qwen Code CLI (แนะนำ)
+### Method 1: Using Qwen Code CLI (Recommended)
 
 ```bash
-# ติดตั้ง Qwen Code CLI
+# Install Qwen Code CLI
 npm install -g qwen-code-cli
 
 # Authenticate
 qwen-code auth login
 ```
 
-### วิธีที่ 2: Manual Setup
+### Method 2: Manual Setup
 
-สร้างไฟล์ `~/.qwen/oauth_creds.json` ด้วยโครงสร้างดังนี้:
+Create a file at `~/.qwen/oauth_creds.json` with the following structure:
 
 ```json
 {
@@ -37,16 +37,16 @@ qwen-code auth login
 
 ## Supported Models
 
-### ผ่าน OAuth (2 models)
+### Via OAuth (2 models)
 
 - `qwen3-coder-plus` - High-performance code analysis (context: 1M, max output: 65k)
 - `qwen3-coder-flash` - Fast code analysis optimized for speed (context: 1M, max output: 65k)
 
-### ⚠️ ข้อจำกัด OAuth
+### ⚠️ OAuth Limitations
 
-รองรับเฉพาะ **qwen3-coder-plus** และ **qwen3-coder-flash** ผ่าน OAuth
+Only **qwen3-coder-plus** and **qwen3-coder-flash** are supported via OAuth.
 
-Models อื่นๆ **ไม่รองรับ OAuth** (ต้องใช้ API Key):
+Other models are **NOT supported via OAuth** (API Key required):
 - ❌ `qwen3-max`
 - ❌ `qwen-plus`
 - ❌ `qwen-flash`
@@ -57,16 +57,16 @@ Models อื่นๆ **ไม่รองรับ OAuth** (ต้องใช
 ### Command Line
 
 ```bash
-# ใช้ default OAuth path (~/.qwen/oauth_creds.json)
+# Use default OAuth path (~/.qwen/oauth_creds.json)
 consult7 qwen-code oauth:
 
-# ระบุ custom OAuth path
+# Specify custom OAuth path
 consult7 qwen-code oauth:~/my-custom-path/oauth_creds.json
 
-# ใช้ qwen3-coder-flash สำหรับความเร็ว
+# Use qwen3-coder-flash for speed
 consult7 qwen-code oauth: --model qwen3-coder-flash
 
-# ทดสอบการเชื่อมต่อ
+# Test the connection
 consult7 qwen-code oauth: --test
 ```
 
@@ -82,22 +82,24 @@ consult7 qwen-code oauth: --test
     }
   }
 }
+```
+
 ### Python API
 
 ```python
 from consult7.consultation import consultation_impl
 
-# ใช้ qwen3-coder-plus (default)
+# Use qwen3-coder-plus (default)
 result = await consultation_impl(
     files=["/path/to/file.py"],
     query="Review this code",
     model="qwen3-coder-plus",
     mode="fast",
     provider="qwen-code",
-    api_key=None  # ใช้ default path: ~/.qwen/oauth_creds.json
+    api_key=None  # Use default path: ~/.qwen/oauth_creds.json
 )
 
-# ใช้ qwen3-coder-flash สำหรับความเร็ว
+# Use qwen3-coder-flash for speed
 result = await consultation_impl(
     files=["/path/to/file.py"],
     query="Quick code analysis",
@@ -110,7 +112,7 @@ result = await consultation_impl(
 
 ## Features
 
-- ✅ OAuth2 authentication (ไม่ต้องใช้ API key)
+- ✅ OAuth2 authentication (no API key needed)
 - ✅ Auto token refresh
 - ✅ OpenAI-compatible API
 - ✅ Thinking blocks support (`<think>...</think>`)
@@ -125,18 +127,18 @@ result = await consultation_impl(
 Error: Failed to load Qwen Code OAuth credentials
 ```
 
-**Solution**: ตรวจสอบว่าไฟล์ `~/.qwen/oauth_creds.json` มีอยู่และมี format ถูกต้อง
+**Solution**: Verify that the file `~/.qwen/oauth_creds.json` exists and has the correct format
 
 ### Token Expired
 
-ระบบจะ auto-refresh token โดยอัตโนมัติ หาก refresh ไม่สำเร็จ:
+The system will automatically refresh the token. If refresh fails:
 
-1. ตรวจสอบ `refresh_token` ใน credentials file
-2. Authenticate ใหม่ด้วย Qwen Code CLI
+1. Check the `refresh_token` in your credentials file
+2. Re-authenticate using Qwen Code CLI
 
 ### 401 Unauthorized Error
 
-หาก token หมดอายุและ refresh ไม่สำเร็จ ให้:
+If the token is expired and refresh fails:
 
 ```bash
 qwen-code auth logout
@@ -145,14 +147,14 @@ qwen-code auth login
 
 ## Performance Tips
 
-- ใช้ `qwen3-coder-plus` สำหรับ high-performance code analysis
-- ใช้ `qwen3-coder-flash` สำหรับ quick responses และ fast analysis
-- Mode `fast` เหมาะสำหรับ quick queries
-- Mode `mid` เพิ่ม reasoning สำหรับ complex analysis
-- Mode `think` สำหรับ deep analysis (แนะนำกับ coder-plus)
+- Use `qwen3-coder-plus` for high-performance code analysis
+- Use `qwen3-coder-flash` for quick responses and fast analysis
+- Mode `fast` is suitable for quick queries
+- Mode `mid` adds reasoning for complex analysis
+- Mode `think` is for deep analysis (recommended with coder-plus)
 
-**Note**: หากต้องการใช้ models อื่นๆ (qwen3-max, qwen-plus, etc.) ต้องใช้ API Key แทน OAuth
+**Note:** If you need to use other models (qwen3-max, qwen-plus, etc.), you must use API Key instead of OAuth
 
 ## Cost
 
-Qwen Code OAuth มี free tier และ paid tiers - ตรวจสอบ quota ของคุณที่ Qwen dashboard
+Qwen Code OAuth has free and paid tiers - check your quota at the Qwen dashboard

@@ -35,6 +35,11 @@ GEMINI_CLI_MODELS = {
         "max_tokens": 64_000,
         "description": "Fast (2s response, 49 tokens)",
     },
+    "gemini-2.5-flash-lite": {
+        "context_length": 1_048_576,
+        "max_tokens": 64_000,
+        "description": "Ultra fast, lightweight, for simple tasks",
+    },
     "gemini-2.5-pro": {
         "context_length": 1_048_576,
         "max_tokens": 64_000,

@@ -17,10 +17,12 @@ class ToolDescriptions:
         ],
         "gemini-cli": [
             '"gemini-2.5-flash" (Fast response ~2s, 1M context, OAuth free)',
+            '"gemini-2.5-flash-lite" (Ultra fast, lightweight, 1M context, OAuth free)',
             '"gemini-2.5-pro" (High quality ~25s, 1M context, OAuth free)',
         ],
         "qwen-code": [
-            '"qwen3-coder-plus" (Code-focused, 128k context, OAuth only)',
+            '"qwen3-coder-plus" (High-performance code analysis, 1M context, OAuth)',
+            '"qwen3-coder-flash" (Fast code analysis optimized for speed, 1M context, OAuth)',
         ],
     }
 

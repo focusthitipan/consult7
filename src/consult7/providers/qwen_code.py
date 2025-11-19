@@ -154,21 +154,32 @@ class QwenCodeProvider(BaseProvider):
             self._refresh_lock = False
 
     def _get_base_url(self) -> str:
-        """Get the base URL for API calls."""
+        """Get the base URL for API calls.
+        
+        OAuth returns resource_url (e.g., "portal.qwen.ai") which is the API base domain.
+        The correct endpoint is: https://portal.qwen.ai/v1 (NOT /compatible-mode/v1)
+        """
         if not self.credentials:
+            # Fallback to DashScope (for API key auth)
             return "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
         resource_url = self.credentials.get(
             "resource_url", "https://dashscope.aliyuncs.com/compatible-mode/v1"
         )
 
+        # Add protocol if missing
         if not resource_url.startswith("http://") and not resource_url.startswith("https://"):
             resource_url = f"https://{resource_url}"
 
-        if not resource_url.endswith("/v1"):
-            resource_url = f"{resource_url}/v1"
+        # OAuth endpoints use /v1 directly (NOT /compatible-mode/v1)
+        # portal.qwen.ai uses: https://portal.qwen.ai/v1
+        if resource_url.endswith("/v1"):
+            base_url = resource_url
+        else:
+            base_url = f"{resource_url}/v1"
 
-        return resource_url
+        logger.info(f"Qwen Code base URL: {base_url}")
+        return base_url
 
     async def _ensure_authenticated(self, oauth_path: Optional[str] = None) -> None:
         """Ensure OAuth credentials are loaded and valid."""

@@ -50,12 +50,22 @@ Consult7 supports 3 providers:
 
 ## Installation
 
+### Prerequisites
+
+Clone the repository and install locally:
+
+```bash
+git clone https://github.com/focusthitipan/consult7.git
+cd consult7
+pip install -e .
+```
+
 ### Option 1: OpenRouter (Recommended for most users)
 
 #### Claude Code
 
 ```bash
-claude mcp add -s user consult7 uvx -- consult7 openrouter your-openrouter-api-key
+claude mcp add -s user consult7 -- consult7 openrouter your-openrouter-api-key
 ```
 
 #### Claude Desktop
@@ -65,17 +75,12 @@ claude mcp add -s user consult7 uvx -- consult7 openrouter your-openrouter-api-k
   "mcpServers": {
     "consult7": {
       "type": "stdio",
-      "command": "uvx",
-      "args": ["consult7", "openrouter", "your-openrouter-api-key"]
+      "command": "consult7",
+      "args": ["openrouter", "your-openrouter-api-key"]
     }
   }
 }
 ```
-
-> **💡 Local Development Tip:**
-> - `uvx consult7` → Uses package from PyPI (production)
-> - `consult7` → Uses local install from `pip install -e .` (development)
-> - After code changes, run `pip install -e .` and restart Claude Desktop
 
 ### Option 2: Gemini CLI (Free, OAuth-based)
 
@@ -89,7 +94,7 @@ gemini  # Login with Google account
 #### Claude Code
 
 ```bash
-claud mcp add -s user consult7-gemini consult7 -- gemini-cli oauth:
+claud mcp add -s user consult7-gemini -- consult7 gemini-cli oauth:
 ```
 
 #### Claude Desktop
@@ -115,7 +120,7 @@ claud mcp add -s user consult7-gemini consult7 -- gemini-cli oauth:
 #### Claude Code
 
 ```bash
-claud mcp add -s user consult7-qwen consult7 -- qwen-code oauth:
+claud mcp add -s user consult7-qwen -- consult7 qwen-code oauth:
 ```
 
 #### Claude Desktop
@@ -138,7 +143,54 @@ claud mcp add -s user consult7-qwen consult7 -- qwen-code oauth:
 
 ---
 
-**Note**: `uvx` automatically downloads and runs consult7 in an isolated environment. No manual installation required.
+**Note**: Consult7 requires local installation via `pip install -e .`. Ensure you have cloned the repository and installed the package before use.
+
+## About Qwen Code
+
+**Qwen Code** is a powerful command-line AI workflow tool specifically optimized for [Qwen3-Coder](https://github.com/QwenLM/Qwen3-Coder) models. It's an AI-powered development assistant for your terminal with:
+
+### Key Features
+- **Code Understanding & Editing** - Query and edit large codebases beyond traditional context window limits
+- **Workflow Automation** - Automate operational tasks like handling pull requests and complex rebases
+- **Enhanced Parser** - Adapted parser specifically optimized for Qwen-Coder models
+- **Vision Model Support** - Automatically detect images in your input and seamlessly switch to vision-capable models for multimodal analysis
+- **Free OAuth Option** - 2,000 requests/day with no token counting needed (Recommended)
+- **Session Management** - Control token usage with configurable session limits
+
+### Popular Use Cases
+- 📚 Understand new codebases with architecture analysis
+- 🔨 Code refactoring & optimization following SOLID principles
+- 📝 Generate tests, documentation, and API specifications
+- 🚀 Automate development workflows and git operations
+- 🐛 Debugging & performance analysis
+
+[🔗 GitHub Repository](https://github.com/QwenLM/qwen-code) | [📖 Documentation](https://qwenlm.github.io/qwen-code-docs/)
+
+## About Gemini CLI
+
+**Gemini CLI** is an open-source AI agent that brings the power of Google's Gemini directly into your terminal. Built by Google, it's designed for developers who live in the command line with:
+
+### Key Features
+- **Free Tier** - 60 requests/min and 1,000 requests/day with personal Google account
+- **Powerful Gemini 2.5 Pro** - Access to 1M token context window
+- **Built-in Tools** - Google Search grounding, file operations, shell commands, web fetching
+- **Extensible** - Full MCP (Model Context Protocol) support for custom integrations
+- **Terminal-first Design** - Optimized for developers working in the command line
+- **GitHub Integration** - Automated PR reviews, issue triage, and on-demand assistance
+- **Open Source** - Apache 2.0 licensed with active community
+
+### Key Features
+- **Code Understanding & Generation** - Query and edit large codebases, generate apps from images/PDFs
+- **Automation & Integration** - Automate operational tasks and connect with MCP servers
+- **Advanced Capabilities** - Ground queries with Google Search, conversation checkpointing, custom context files
+- **GitHub Integration** - Automated PR reviews, issue triage, and workflow automation
+
+### Supported Models
+- `gemini-2.5-flash` - Fast responses (2s, balanced performance)
+- `gemini-2.5-flash-lite` - Ultra fast, lightweight, cost-optimized
+- `gemini-2.5-pro` - High quality analysis with reasoning
+
+[🔗 GitHub Repository](https://github.com/google-gemini/gemini-cli) | [📖 Documentation](https://geminicli.com/docs/)
 
 ## Command Line Options
 
@@ -187,8 +239,9 @@ You can use any OpenRouter model ID (e.g., `deepseek/deepseek-r1-0528`). See the
 
 | Model | Context | Max Output | Use Case |
 |-------|---------|------------|----------|
-| `gemini-2.5-flash` | 1.048M | 64k | Fast responses (2s, free tier) |
-| `gemini-2.5-pro` | 1.048M | 64k | High quality analysis (free tier) |
+| `gemini-2.5-flash` | 1.048M | 64k | Fast responses (2s, balanced performance, free tier) |
+| `gemini-2.5-flash-lite` | 1.048M | 64k | Ultra fast, lightweight, cost-optimized (free tier) |
+| `gemini-2.5-pro` | 1.048M | 64k | High quality analysis with reasoning (free tier) |
 
 **Note**: Only Gemini 2.5 Series supported (1.5 and 1.0 not supported via OAuth)
 
