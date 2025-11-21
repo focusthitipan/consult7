@@ -75,33 +75,49 @@ class QwenCodeProvider(BaseProvider):
             raise RuntimeError(f"Failed to load Qwen Code OAuth credentials: {e}")
 
     def _is_token_valid(self) -> bool:
-        """Check if current token is valid."""
+        """Check if current token is valid (proactive check)."""
         if not self.credentials:
+            logger.debug("No credentials loaded")
             return False
 
+        # Check access token exists
+        if not self.credentials.get("access_token"):
+            logger.debug("No access token in credentials")
+            return False
+
+        # Check expiry date
         expiry_date = self.credentials.get("expiry_date")
         if not expiry_date:
+            logger.debug("No expiry date in credentials")
             return False
 
-        # 30 second buffer
+        # 30 second buffer for proactive refresh
         TOKEN_REFRESH_BUFFER_MS = 30 * 1000
         import time
 
-        return time.time() * 1000 < expiry_date - TOKEN_REFRESH_BUFFER_MS
+        is_valid = time.time() * 1000 < expiry_date - TOKEN_REFRESH_BUFFER_MS
+        if not is_valid:
+            logger.debug(f"Token expired or expiring soon (expiry: {expiry_date})")
+        
+        return is_valid
 
     async def _refresh_access_token(self) -> None:
         """Refresh the OAuth access token."""
         if self._refresh_lock:
             # Another refresh is in progress, wait a bit
+            logger.debug("Token refresh already in progress, waiting...")
             import asyncio
 
             await asyncio.sleep(1)
             return
 
         self._refresh_lock = True
+        logger.info("Starting Qwen Code token refresh...")
         try:
             if not self.credentials or not self.credentials.get("refresh_token"):
-                raise RuntimeError("No refresh token available")
+                raise RuntimeError(
+                    "No refresh token available. Please re-authenticate using Qwen Code OAuth flow."
+                )
 
             body_data = {
                 "grant_type": "refresh_token",
@@ -116,22 +132,34 @@ class QwenCodeProvider(BaseProvider):
                     headers={
                         "Content-Type": "application/x-www-form-urlencoded",
                         "Accept": "application/json",
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                        "Origin": "https://chat.qwen.ai",
+                        "Referer": "https://chat.qwen.ai/",
                     },
                     timeout=30.0,
                 )
 
                 if response.status_code != 200:
+                    error_text = response.text[:500]  # Limit error message
+                    logger.error(f"Token refresh failed: {response.status_code} - {error_text}")
                     raise RuntimeError(
-                        f"Token refresh failed: {response.status_code} - {response.text}"
+                        f"Token refresh failed: {response.status_code} - {error_text}"
                     )
 
-                token_data = response.json()
+                # Handle non-JSON response
+                try:
+                    token_data = response.json()
+                except json.JSONDecodeError as e:
+                    logger.error(f"Token refresh returned non-JSON response: {response.text[:200]}")
+                    raise RuntimeError(
+                        f"Token refresh returned invalid JSON: {e}\n"
+                        f"Response: {response.text[:200]}"
+                    )
 
                 if "error" in token_data:
-                    raise RuntimeError(
-                        f"Token refresh failed: {token_data['error']} - "
-                        f"{token_data.get('error_description', '')}"
-                    )
+                    error_msg = f"{token_data['error']} - {token_data.get('error_description', '')}"
+                    logger.error(f"Token refresh API error: {error_msg}")
+                    raise RuntimeError(f"Token refresh failed: {error_msg}")
 
                 # Update credentials
                 import time
@@ -144,12 +172,18 @@ class QwenCodeProvider(BaseProvider):
                 self.credentials["expiry_date"] = int(
                     (time.time() + token_data.get("expires_in", 3600)) * 1000
                 )
+                
+                logger.info("Qwen Code token refreshed successfully")
 
                 # Save to file
                 if self._oauth_path:
                     with open(self._oauth_path, "w") as f:
                         json.dump(self.credentials, f, indent=2)
+                    logger.debug(f"Refreshed credentials saved to {self._oauth_path}")
 
+        except Exception as e:
+            logger.error(f"Token refresh exception: {e}")
+            raise
         finally:
             self._refresh_lock = False
 
@@ -182,18 +216,23 @@ class QwenCodeProvider(BaseProvider):
         return base_url
 
     async def _ensure_authenticated(self, oauth_path: Optional[str] = None) -> None:
-        """Ensure OAuth credentials are loaded and valid."""
+        """Ensure OAuth credentials are loaded and valid (proactive check)."""
+        # Load credentials if not already loaded
         if not self.credentials:
             await self._load_oauth_credentials(oauth_path)
+            logger.info("Qwen Code OAuth credentials loaded")
 
+        # Proactive token validity check and refresh
         if not self._is_token_valid():
+            logger.info("Qwen Code token invalid or expired, refreshing...")
             await self._refresh_access_token()
 
-        # Create or update client
+        # Create or update client with latest credentials
         if not self.client or self.client.api_key != self.credentials["access_token"]:
             self.client = AsyncOpenAI(
                 api_key=self.credentials["access_token"], base_url=self._get_base_url()
             )
+            logger.debug(f"OpenAI client updated with base_url: {self._get_base_url()}")
 
     async def get_model_info(self, model_name: str, api_key: Optional[str]) -> Optional[dict]:
         """Get model information.
@@ -238,12 +277,17 @@ class QwenCodeProvider(BaseProvider):
             oauth_path = None
             if api_key and api_key.startswith("oauth:"):
                 oauth_path = api_key[6:]  # Remove "oauth:" prefix
+                if not oauth_path:  # Empty path after "oauth:"
+                    oauth_path = None
 
-            # Ensure authenticated
+            # Proactively ensure authenticated before any API calls
             await self._ensure_authenticated(oauth_path)
+            logger.info("Qwen Code authentication verified")
 
             if not self.client:
-                return "", "OpenAI client not initialized", None
+                error_msg = "OpenAI client not initialized after authentication"
+                logger.error(error_msg)
+                return "", error_msg, None
 
             # Validate model
             if model_name not in QWEN_CODE_MODELS:
@@ -261,24 +305,12 @@ class QwenCodeProvider(BaseProvider):
                 {"role": "user", "content": user_message},
             ]
 
-            # Call API with retry logic
-            try:
-                response = await self.client.chat.completions.create(
-                    model=model_name,
-                    messages=messages,
-                    temperature=0,
-                    max_tokens=QWEN_CODE_MODELS[model_name]["max_tokens"],
-                    stream=True,
-                    stream_options={"include_usage": True},
-                )
-
-            except Exception as e:
-                # If 401, try refreshing token and retry once
-                if "401" in str(e):
-                    await self._refresh_access_token()
-                    self.client = AsyncOpenAI(
-                        api_key=self.credentials["access_token"], base_url=self._get_base_url()
-                    )
+            # Call API with retry logic for 401 errors
+            max_retries = 2
+            last_error = None
+            
+            for attempt in range(max_retries):
+                try:
                     response = await self.client.chat.completions.create(
                         model=model_name,
                         messages=messages,
@@ -287,8 +319,27 @@ class QwenCodeProvider(BaseProvider):
                         stream=True,
                         stream_options={"include_usage": True},
                     )
-                else:
-                    raise
+                    break  # Success, exit retry loop
+                    
+                except Exception as e:
+                    last_error = e
+                    error_str = str(e)
+                    
+                    # Log the error
+                    logger.warning(f"API call attempt {attempt + 1} failed: {error_str}")
+                    
+                    # If 401 and we have retries left, refresh token and retry
+                    if "401" in error_str and attempt < max_retries - 1:
+                        logger.info("Got 401, forcing token refresh and retrying...")
+                        # Force credential reload and refresh
+                        self.credentials = None
+                        await self._ensure_authenticated(oauth_path)
+                        continue
+                    
+                    # For other errors or last retry, raise
+                    if attempt >= max_retries - 1:
+                        logger.error(f"API call failed after {max_retries} attempts: {error_str}")
+                        raise
 
             # Collect response
             full_response = ""
@@ -341,6 +392,30 @@ class QwenCodeProvider(BaseProvider):
                 reasoning_tokens if thinking_mode and reasoning_tokens > 0 else None,
             )
 
+        except json.JSONDecodeError as e:
+            error_msg = (
+                f"JSON decode error: {e}\n"
+                f"This usually means the API returned a non-JSON response (HTML error page).\n"
+                f"Please check if your OAuth token is valid by re-authenticating."
+            )
+            logger.error(error_msg)
+            return "", error_msg, None
+            
         except Exception as e:
-            logger.error(f"Qwen Code API error: {e}")
-            return "", str(e), None
+            error_msg = str(e)
+            logger.error(f"Qwen Code API error: {error_msg}")
+            
+            # Provide helpful error messages
+            if "401" in error_msg:
+                error_msg = (
+                    f"Authentication failed: {error_msg}\n"
+                    f"Please re-authenticate using Qwen Code OAuth flow."
+                )
+            elif "Expecting value" in error_msg:
+                error_msg = (
+                    f"JSON parsing error: {error_msg}\n"
+                    f"API returned non-JSON response. Token may be invalid.\n"
+                    f"Please re-authenticate."
+                )
+            
+            return "", error_msg, None
