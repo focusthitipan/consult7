@@ -14,12 +14,16 @@ from .tool_definitions import ToolDescriptions
 from .providers import PROVIDERS
 from .consultation import consultation_impl
 
-# Set up consult7 logger
+# Set up consult7 logger with flushing
 logger = logging.getLogger("consult7")
 logger.setLevel(logging.INFO)
 handler = logging.StreamHandler(sys.stderr)
 handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+handler.flush = lambda: sys.stderr.flush()  # Force flush after each log
 logger.addHandler(handler)
+
+# Also force stderr to be unbuffered
+sys.stderr.reconfigure(line_buffering=True) if hasattr(sys.stderr, 'reconfigure') else None
 
 
 class Consult7Server(Server):
@@ -44,15 +48,60 @@ async def test_api_connection(server: Consult7Server) -> bool:
     print(f"Testing {server.provider} API connection...")
     
     # For OAuth providers, None means use default path (which is valid)
-    is_oauth_provider = server.provider in ["gemini-cli", "qwen-code"]
+    is_oauth_provider = server.provider in ["gemini-cli", "qwen-code", "github-copilot"]
+    
+    # Special handling for GitHub Copilot - check token exists first (only in interactive test mode)
+    if server.provider == "github-copilot":
+        from .oauth.token_storage import TokenStorage
+        from .providers.github_copilot import GitHubCopilotProvider
+        
+        token_storage = TokenStorage()
+        token_data = token_storage.load_token("github-copilot")
+        
+        if not token_data:
+            print("OAuth Token: Not found")
+            print()
+            print("[WARNING] No GitHub Copilot token found!")
+            print("          You need to authenticate first.")
+            print()
+            
+            # Check if running interactively (has stdin)
+            import sys
+            if sys.stdin and sys.stdin.isatty():
+                # Ask user if they want to authenticate now
+                try:
+                    response = input("Would you like to authenticate now? (yes/no): ").strip().lower()
+                    if response in ["yes", "y"]:
+                        copilot = GitHubCopilotProvider()
+                        await copilot.authenticate()
+                        print()
+                        print("[SUCCESS] Authentication successful! Continuing with test...")
+                        print()
+                    else:
+                        print()
+                        print("Test cancelled. Authenticate later with:")
+                        print("  consult7 github-copilot oauth:")
+                        return False
+                except (KeyboardInterrupt, EOFError):
+                    print("\n\nTest cancelled.")
+                    return False
+            else:
+                # Non-interactive mode (e.g., MCP server) - just show error
+                print()
+                print("Cannot authenticate in non-interactive mode.")
+                print("Please authenticate first with:")
+                print("  consult7 github-copilot oauth:")
+                return False
     
     if server.api_key is None:
         if is_oauth_provider:
             # OAuth with default path
             if server.provider == "gemini-cli":
                 print("OAuth Path: ~/.gemini/oauth_creds.json (default)")
-            else:
+            elif server.provider == "qwen-code":
                 print("OAuth Path: ~/.qwen/oauth_creds.json (default)")
+            elif server.provider == "github-copilot":
+                print("OAuth Token: ~/.consult7/github-copilot_oauth_token.enc (encrypted)")
         else:
             # Non-OAuth provider needs API key
             print("API Key: Not set")
@@ -95,29 +144,32 @@ async def test_api_connection(server: Consult7Server) -> bool:
         # Check if result contains error
         if result.startswith("Error:"):
             print()
-            print("❌ Test FAILED")
+            print("[FAILED] Test FAILED")
             print(result)
             return False
         
         print()
-        print("✅ Test PASSED")
+        print("[PASSED] Test PASSED")
         print(f"Response preview: {result[:200]}...")
         return True
         
     except Exception as e:
         print()
-        print("❌ Test FAILED")
+        print("[FAILED] Test FAILED")
         print(f"Error: {e}")
         return False
 
 
 async def main():
     """Parse command line arguments and run the server."""
+    print("DEBUG: main() started", file=sys.stderr, flush=True)
+    
     # Simple argument parsing
     args = sys.argv[1:]
+    print(f"DEBUG: args={args}", file=sys.stderr, flush=True)
     test_mode = False
 
-    # Check for --test flag at the end
+    # Check for --test flag at the end FIRST
     if args and args[-1] == "--test":
         test_mode = True
         args = args[:-1]  # Remove --test from args
@@ -128,20 +180,28 @@ async def main():
         sys.stderr.write("Usage: consult7 <provider> <api-key-or-oauth-path> [--test]\n")
         sys.stderr.write("\n")
         sys.stderr.write("Providers:\n")
-        sys.stderr.write("  openrouter     - OpenRouter API (requires API key)\n")
-        sys.stderr.write("  gemini-cli     - Gemini CLI OAuth (use oauth: for default path)\n")
-        sys.stderr.write("  qwen-code      - Qwen Code OAuth (use oauth: for default path)\n")
+        sys.stderr.write("  openrouter      - OpenRouter API (requires API key)\n")
+        sys.stderr.write("  gemini-cli      - Gemini CLI OAuth (use oauth: for default path)\n")
+        sys.stderr.write("  qwen-code       - Qwen Code OAuth (use oauth: for default path)\n")
+        sys.stderr.write("  github-copilot  - GitHub Copilot OAuth (requires authentication)\n")
         sys.stderr.write("\n")
         sys.stderr.write("Examples:\n")
         sys.stderr.write("  consult7 openrouter sk-or-v1-...\n")
         sys.stderr.write("  consult7 gemini-cli oauth:\n")
         sys.stderr.write("  consult7 qwen-code oauth:\n")
         sys.stderr.write("  consult7 gemini-cli oauth:/custom/path/oauth_creds.json\n")
+        sys.stderr.write("  consult7 github-copilot oauth:\n")
         sys.stderr.write("  consult7 openrouter sk-or-v1-... --test\n")
+        sys.stderr.write("\n")
+        sys.stderr.write("GitHub Copilot Setup:\n")
+        sys.stderr.write("  1. Authenticate:  consult7 github-copilot oauth: --test\n")
+        sys.stderr.write("     (Answer 'yes' when prompted)\n")
+        sys.stderr.write("  2. Use normally:  consult7 github-copilot oauth:\n")
         sys.stderr.write("\n")
         sys.stderr.write("Note: oauth: uses default paths:\n")
         sys.stderr.write("  - Gemini CLI: ~/.gemini/oauth_creds.json\n")
         sys.stderr.write("  - Qwen Code: ~/.qwen/oauth_creds.json\n")
+        sys.stderr.write("  - GitHub Copilot: ~/.consult7/github-copilot_oauth_token.enc\n")
         sys.exit(EXIT_FAILURE)
 
     if len(args) > MIN_ARGS + 1:
@@ -167,11 +227,28 @@ async def main():
         sys.exit(EXIT_FAILURE)
 
     # Create server with stored configuration
+    print(f"DEBUG: Creating server - provider={provider}, api_key={api_key}", file=sys.stderr, flush=True)
     server = Consult7Server("consult7", api_key, provider)
+    print("DEBUG: Server created", file=sys.stderr, flush=True)
+
+    print("DEBUG: Registering handlers...", file=sys.stderr, flush=True)
+    
+    @server.list_resources()
+    async def list_resources() -> list[types.Resource]:
+        """List available resources (none for this server)."""
+        print("DEBUG: list_resources called", file=sys.stderr, flush=True)
+        return []
+
+    @server.list_prompts()
+    async def list_prompts() -> list[types.Prompt]:
+        """List available prompts (none for this server)."""
+        print("DEBUG: list_prompts called", file=sys.stderr, flush=True)
+        return []
 
     @server.list_tools()
     async def list_tools() -> list[types.Tool]:
         """List available tools with provider-specific model examples."""
+        print("DEBUG: list_tools called", file=sys.stderr, flush=True)
         return [
             types.Tool(
                 name="consultation",
@@ -215,6 +292,7 @@ async def main():
     @server.call_tool()
     async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         """Handle tool calls."""
+        print(f"DEBUG: call_tool invoked: {name}", file=sys.stderr, flush=True)
         try:
             if name == "consultation":
                 result = await consultation_impl(
@@ -257,13 +335,18 @@ async def main():
     
     # Show API key/OAuth status
     if server.api_key is None:
-        if server.provider in ["gemini-cli", "qwen-code"]:
-            default_path = "~/.gemini/oauth_creds.json" if server.provider == "gemini-cli" else "~/.qwen/oauth_creds.json"
+        if server.provider in ["gemini-cli", "qwen-code", "github-copilot"]:
+            if server.provider == "gemini-cli":
+                default_path = "~/.gemini/oauth_creds.json"
+            elif server.provider == "qwen-code":
+                default_path = "~/.qwen/oauth_creds.json"
+            else:  # github-copilot
+                default_path = "~/.consult7/github-copilot_oauth_token.enc"
             logger.info(f"OAuth: Using default path ({default_path})")
         else:
             logger.info("API Key: Not set")
     else:
-        if server.provider in ["gemini-cli", "qwen-code"]:
+        if server.provider in ["gemini-cli", "qwen-code", "github-copilot"]:
             logger.info(f"OAuth: Custom path ({server.api_key})")
         else:
             logger.info("API Key: Set")
@@ -274,25 +357,41 @@ async def main():
         for example in examples:
             logger.info(f"  - {example}")
 
+    print(f"DEBUG: test_mode={test_mode}", file=sys.stderr, flush=True)
+
     # Run test mode if requested
     if test_mode:
+        print("DEBUG: Running test mode", file=sys.stderr, flush=True)
         success = await test_api_connection(server)
         sys.exit(EXIT_SUCCESS if success else EXIT_FAILURE)
 
+    print("DEBUG: Entering normal server mode", file=sys.stderr, flush=True)
     # Normal server mode
-    async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
-        await server.run(
-            read_stream,
-            write_stream,
-            InitializationOptions(
+    try:
+        # Force flush to ensure logs appear
+        print("DEBUG: Starting MCP stdio server...", file=sys.stderr, flush=True)
+        async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
+            print("DEBUG: Stdio server created, running server.run()...", file=sys.stderr, flush=True)
+            init_options = InitializationOptions(
                 server_name="consult7",
                 server_version=SERVER_VERSION,
                 capabilities=server.get_capabilities(
                     notification_options=NotificationOptions(),
                     experimental_capabilities={},
                 ),
-            ),
-        )
+            )
+            print(f"DEBUG: InitializationOptions created: {init_options}", file=sys.stderr, flush=True)
+            await server.run(
+                read_stream,
+                write_stream,
+                init_options,
+            )
+            print("DEBUG: Server.run() completed", file=sys.stderr, flush=True)
+    except Exception as e:
+        print(f"ERROR: MCP Server error: {type(e).__name__}: {str(e)}", file=sys.stderr, flush=True)
+        import traceback
+        print(traceback.format_exc(), file=sys.stderr, flush=True)
+        sys.exit(EXIT_FAILURE)
 
 
 def run():

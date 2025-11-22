@@ -24,6 +24,19 @@ class ToolDescriptions:
             '"qwen3-coder-plus" (High-performance code analysis, 1M context, OAuth)',
             '"qwen3-coder-flash" (Fast code analysis optimized for speed, 1M context, OAuth)',
         ],
+        "github-copilot": [
+            '"gpt-4o" (128k/16k, general purpose)',
+            '"gpt-4.1" (128k/16k, improved reasoning)',
+            '"gpt-5" (128k/16k, flagship)',
+            '"gpt-5-mini" (128k/64k, fast + high output)',
+            '"gpt-5.1" (128k/16k, latest GPT-5)',
+            '"claude-haiku-4.5" (128k/16k, fast)',
+            '"claude-sonnet-4" (128k/16k, balanced)',
+            '"claude-sonnet-4.5" (128k/16k, best quality)',
+            '"gemini-2.5-pro" (128k/64k, high quality)',
+            '"gemini-3-pro-preview" (128k/64k, preview model)',
+            '"grok-code-fast-1" (128k/10k, high output)',
+        ],
     }
 
     @classmethod
@@ -85,9 +98,21 @@ Limits: Dynamic per model - each model optimized for its full context capacity""
     @classmethod
     def _get_provider_notes(cls, provider: str) -> str:
         """Get provider-specific notes."""
-        return (
+        base_modes = (
             "Performance Modes (use 'mode' parameter):\n"
             "- fast: No reasoning, fastest\n"
             "- mid: Moderate reasoning\n"
             "- think: Maximum reasoning for deepest analysis"
         )
+        
+        if provider == "github-copilot":
+            return (
+                f"{base_modes}\n\n"
+                "Authentication: GitHub Copilot uses OAuth Device Flow.\n"
+                "- First run: Use 'oauth:' to trigger device flow (opens browser)\n"
+                "- Subsequent runs: Use 'oauth:' (auto-loads stored token)\n"
+                "- Custom token path: 'oauth:/custom/path.json'\n"
+                "- Token stored securely with AES-256-GCM encryption"
+            )
+        
+        return base_modes

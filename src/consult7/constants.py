@@ -38,9 +38,22 @@ DEFAULT_OUTPUT_TOKENS = 8_000  # Default max output tokens (~300 lines of code)
 SMALL_OUTPUT_TOKENS = 4_000  # Output tokens for smaller models
 SMALL_MODEL_THRESHOLD = 100_000  # Context size threshold for small models
 
+# GitHub Copilot constants
+GITHUB_COPILOT_CLIENT_ID = "Iv1.b507a08c87ecfe98"  # Public client ID for Device Flow
+GITHUB_COPILOT_DEVICE_CODE_URL = "https://github.com/login/device/code"
+GITHUB_COPILOT_TOKEN_URL = "https://github.com/login/oauth/access_token"
+GITHUB_COPILOT_VERIFICATION_URL = "https://github.com/login/device"
+GITHUB_COPILOT_API_TOKEN_URL = "https://api.github.com/copilot_internal/v2/token"
+GITHUB_COPILOT_SCOPE = "read:user copilot"
+GITHUB_COPILOT_TIMEOUT = 600.0  # 10 minutes - same as other providers
+GITHUB_COPILOT_DEVICE_CODE_EXPIRES_IN = 900  # 15 minutes
+GITHUB_COPILOT_POLLING_INTERVAL = 5  # Poll every 5 seconds
+GITHUB_COPILOT_MAX_RETRIES = 3  # Max retry attempts for transient errors
+
 # Test model for each provider
 TEST_MODELS = {
     "openrouter": "openai/gpt-5.1",
     "gemini-cli": "gemini-2.5-flash",
     "qwen-code": "qwen3-coder-plus",
+    "github-copilot": "gpt-4o",
 }

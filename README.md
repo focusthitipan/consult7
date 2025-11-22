@@ -4,11 +4,12 @@
 
 ## Supported Providers
 
-Consult7 supports 3 providers:
+Consult7 supports 4 providers:
 
 1. **OpenRouter** - Access to 500+ models via API key
 2. **Gemini CLI** - Google Gemini models via OAuth (free tier, no API key needed)
 3. **Qwen Code** - Alibaba Qwen models via OAuth (code-focused)
+4. **GitHub Copilot** - Use your GitHub Copilot subscription via OAuth (no additional API key needed)
 
 ## Why Consult7?
 
@@ -94,7 +95,7 @@ gemini  # Login with Google account
 #### Claude Code
 
 ```bash
-claud mcp add -s user consult7-gemini -- consult7 gemini-cli oauth:
+claude mcp add -s user consult7-gemini -- consult7 gemini-cli oauth:
 ```
 
 #### Claude Desktop
@@ -120,7 +121,7 @@ claud mcp add -s user consult7-gemini -- consult7 gemini-cli oauth:
 #### Claude Code
 
 ```bash
-claud mcp add -s user consult7-qwen -- consult7 qwen-code oauth:
+claude mcp add -s user consult7-qwen -- consult7 qwen-code oauth:
 ```
 
 #### Claude Desktop
@@ -140,6 +141,72 @@ claud mcp add -s user consult7-qwen -- consult7 qwen-code oauth:
 **Note**: `oauth:` uses default path (`~/.qwen/oauth_creds.json`) automatically. For custom path: `oauth:/path/to/creds.json`
 
 📖 [Qwen Code Setup Guide](docs/QWEN_CODE_SETUP.md)
+
+### Option 4: GitHub Copilot (OAuth-based, subscription required)
+
+**Prerequisites**: 
+- Active GitHub Copilot subscription (Individual, Business, or Enterprise) - Check at https://github.com/settings/copilot
+- Web browser for one-time authentication
+
+#### Step 1: Authenticate with GitHub
+
+Run the authentication command (first time only):
+
+```bash
+consult7 github-copilot oauth: --test
+```
+
+**What happens:**
+1. System prompts: "Would you like to authenticate now? (yes/no):" → Type `yes`
+2. Browser opens automatically to `https://github.com/login/device`
+3. Copy the device code shown in terminal (e.g., `ABCD-1234`)
+4. Paste code into browser prompt
+5. Authorize Consult7 to access your GitHub Copilot
+6. Token saved securely to `~/.consult7/github-copilot_oauth_token.enc` (encrypted)
+
+**Note**: Authentication happens once. Subsequent calls use saved token automatically.
+
+#### Step 2: Setup in Claude Code
+
+```bash
+claude mcp add -s user consult7-copilot -- consult7 github-copilot oauth:
+```
+
+#### Step 3: Setup in Claude Desktop
+
+Add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "consult7-copilot": {
+      "type": "stdio",
+      "command": "consult7",
+      "args": ["github-copilot", "oauth:"]
+    }
+  }
+}
+```
+
+**Location:**
+- **macOS/Linux**: `~/.config/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+#### Step 4: Verify Setup
+
+Test the connection:
+
+```bash
+consult7 github-copilot oauth: --test
+```
+
+Expected output:
+```
+✓ OAuth Token found and valid
+✓ GitHub Copilot provider is ready
+```
+
+📖 [GitHub Copilot Setup Guide](docs/GITHUB_COPILOT_SETUP.md) - Detailed setup, troubleshooting, and advanced usage
 
 ---
 
@@ -178,12 +245,9 @@ claud mcp add -s user consult7-qwen -- consult7 qwen-code oauth:
 - **Terminal-first Design** - Optimized for developers working in the command line
 - **GitHub Integration** - Automated PR reviews, issue triage, and on-demand assistance
 - **Open Source** - Apache 2.0 licensed with active community
-
-### Key Features
 - **Code Understanding & Generation** - Query and edit large codebases, generate apps from images/PDFs
 - **Automation & Integration** - Automate operational tasks and connect with MCP servers
 - **Advanced Capabilities** - Ground queries with Google Search, conversation checkpointing, custom context files
-- **GitHub Integration** - Automated PR reviews, issue triage, and workflow automation
 
 ### Supported Models
 - `gemini-2.5-flash` - Fast responses (2s, balanced performance)
@@ -209,6 +273,12 @@ consult7 gemini-cli oauth:/custom/path.json [--test]   # Use custom path
 ```bash
 consult7 qwen-code oauth: [--test]                     # Use default path: ~/.qwen/oauth_creds.json
 consult7 qwen-code oauth:/custom/path.json [--test]    # Use custom path
+```
+
+### GitHub Copilot
+```bash
+consult7 github-copilot oauth: [--test]                # Use default path: ~/.consult7/github-copilot_oauth_token.enc
+consult7 github-copilot oauth:/custom/path.enc [--test] # Use custom path
 ```
 
 **Options:**
@@ -253,6 +323,37 @@ You can use any OpenRouter model ID (e.g., `deepseek/deepseek-r1-0528`). See the
 | `qwen3-coder-flash` | 1M | 65k | Fast code analysis optimized for speed (OAuth) |
 
 **Note**: Other Qwen models require API Key instead of OAuth
+
+### GitHub Copilot (OAuth, Subscription required)
+
+**GPT Models:**
+| Model | Context | Max Output | Use Case |
+|-------|---------|------------|----------|
+| `gpt-4o` | 128k | 16k | Balanced performance, good for most tasks |
+| `gpt-4.1` | 128k | 16k | Latest GPT-4 model |
+| `gpt-5` | 128k | 16k | Latest GPT-5 model |
+| `gpt-5-mini` | 128k | 64k | Fast, cost-effective |
+| `gpt-5.1` | 128k | 16k | Cutting edge GPT-5 |
+
+**Claude Models:**
+| Model | Context | Max Output | Use Case |
+|-------|---------|------------|----------|
+| `claude-haiku-4.5` | 128k* | 16k* | Fast, efficient Claude model |
+| `claude-sonnet-4` | 128k* | 16k* | Balanced reasoning and performance |
+| `claude-sonnet-4.5` | 128k* | 16k* | Excellent reasoning and analysis |
+
+**Gemini Models:**
+| Model | Context | Max Output | Use Case |
+|-------|---------|------------|----------|
+| `gemini-2.5-pro` | 128k* | 64k* | High-quality analysis |
+| `gemini-3-pro-preview` | 128k* | 64k* | Preview model with improvements |
+
+**X AI Models:**
+| Model | Context | Max Output | Use Case |
+|-------|---------|------------|----------|
+| `grok-code-fast-1` | 128k | 10k | Optimized output tokens |
+
+**\*Note**: Claude and Gemini models show reduced context/output limits in GitHub Copilot IDE integration compared to their nominal API capabilities. See [Setup Guide](docs/GITHUB_COPILOT_SETUP.md) for details.
 
 ## Performance Modes
 
@@ -346,6 +447,43 @@ result = await consultation_impl(
 )
 ```
 
+**GitHub Copilot:**
+```python
+result = await consultation_impl(
+    files=["/path/to/file.py"],
+    query="Analyze this code",
+    model="gpt-4o",
+    mode="mid",
+    provider="github-copilot",
+    api_key=None  # Use default path: ~/.consult7/github-copilot_oauth_token.enc
+    # or api_key="/custom/path/token.enc" for custom path
+)
+```
+
+### Via MCP in Claude Code (GitHub Copilot Example)
+
+Once authenticated and setup, you can use Consult7 directly in Claude Code:
+
+```json
+{
+  "files": ["/Users/john/project/src/*.py", "/Users/john/project/lib/*.py"],
+  "query": "Analyze the architecture and identify potential security vulnerabilities",
+  "model": "gpt-4o",
+  "mode": "think"
+}
+```
+
+**Available GitHub Copilot Models:**
+- `gpt-4o`, `gpt-4.1`, `gpt-5`, `gpt-5-mini`, `gpt-5.1` (GPT series)
+- `claude-haiku-4.5`, `claude-sonnet-4`, `claude-sonnet-4.5` (Claude series)
+- `gemini-2.5-pro`, `gemini-3-pro-preview` (Gemini series)
+- `grok-code-fast-1` (X AI models)
+
+**Recommended Modes:**
+- `fast` - Quick analysis, summarization
+- `mid` - Code reviews, bug detection
+- `think` - Deep security analysis, complex refactoring, architectural decisions
+
 ## Testing
 
 ```bash
@@ -357,7 +495,45 @@ consult7 gemini-cli oauth: --test
 
 # Test Qwen Code
 consult7 qwen-code oauth: --test
+
+# Test GitHub Copilot
+consult7 github-copilot oauth: --test
 ```
+
+## Troubleshooting GitHub Copilot
+
+### "OAuth Token not found" error
+
+**Solution**: Authenticate first using the test command:
+```bash
+consult7 github-copilot oauth: --test
+```
+
+Then follow the interactive OAuth Device Flow to authorize.
+
+### "No GitHub Copilot subscription found" error
+
+**Check your subscription**:
+1. Visit https://github.com/settings/copilot
+2. Ensure your subscription is active (not expired)
+3. Verify you're using the correct GitHub account
+4. Try re-authenticating:
+   ```bash
+   rm ~/.consult7/github-copilot_oauth_token.enc
+   consult7 github-copilot oauth: --test
+   ```
+
+### Browser doesn't open automatically
+
+**Manual steps**:
+1. Copy the device code from terminal (e.g., `ABCD-1234`)
+2. Manually visit https://github.com/login/device
+3. Paste code and authorize
+4. Wait for confirmation in terminal
+
+### Still having issues?
+
+📖 See [GitHub Copilot Setup Guide](docs/GITHUB_COPILOT_SETUP.md) for detailed troubleshooting and advanced configuration.
 
 ## Uninstalling
 

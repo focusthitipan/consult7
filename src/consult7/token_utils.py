@@ -30,6 +30,9 @@ THINKING_LIMITS = {
     # X-AI Grok models - TBD (need to test)
     "x-ai/grok-4": 32_000,  # To be confirmed
     "x-ai/grok-4-fast": 32_000,  # To be confirmed
+    # GitHub Copilot models (via OpenRouter-style o1 models)
+    "o1-preview": 32_768,  # OpenAI o1-preview with reasoning
+    "o1-mini": 65_536,  # OpenAI o1-mini with reasoning
 }
 
 

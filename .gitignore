@@ -168,3 +168,9 @@ test_output/
 # API Keys - NEVER commit these
 api-keys.txt
 **/api-keys.txt
+
+# Local specify config
+.specify
+.ruff_cache
+specs/
+.github
