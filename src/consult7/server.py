@@ -13,6 +13,7 @@ from .constants import SERVER_VERSION, EXIT_SUCCESS, EXIT_FAILURE, MIN_ARGS, TES
 from .tool_definitions import ToolDescriptions
 from .providers import PROVIDERS
 from .consultation import consultation_impl
+from typing import Optional
 
 # Set up consult7 logger with flushing
 logger = logging.getLogger("consult7")
@@ -29,10 +30,11 @@ sys.stderr.reconfigure(line_buffering=True) if hasattr(sys.stderr, 'reconfigure'
 class Consult7Server(Server):
     """Extended MCP Server that stores API configuration."""
 
-    def __init__(self, name: str, api_key: str, provider: str):
+    def __init__(self, name: str, api_key: str, provider: str, db_dsn: Optional[str] = None):
         super().__init__(name)
         self.api_key = api_key
         self.provider = provider
+        self.db_dsn = db_dsn
 
 
 async def test_api_connection(server: Consult7Server) -> bool:
@@ -46,25 +48,25 @@ async def test_api_connection(server: Consult7Server) -> bool:
     """
     print()
     print(f"Testing {server.provider} API connection...")
-    
+
     # For OAuth providers, None means use default path (which is valid)
     is_oauth_provider = server.provider in ["gemini-cli", "qwen-code", "github-copilot"]
-    
+
     # Special handling for GitHub Copilot - check token exists first (only in interactive test mode)
     if server.provider == "github-copilot":
         from .oauth.token_storage import TokenStorage
         from .providers.github_copilot import GitHubCopilotProvider
-        
+
         token_storage = TokenStorage()
         token_data = token_storage.load_token("github-copilot")
-        
+
         if not token_data:
             print("OAuth Token: Not found")
             print()
             print("[WARNING] No GitHub Copilot token found!")
             print("          You need to authenticate first.")
             print()
-            
+
             # Check if running interactively (has stdin)
             import sys
             if sys.stdin and sys.stdin.isatty():
@@ -92,7 +94,7 @@ async def test_api_connection(server: Consult7Server) -> bool:
                 print("Please authenticate first with:")
                 print("  consult7 github-copilot oauth:")
                 return False
-    
+
     if server.api_key is None:
         if is_oauth_provider:
             # OAuth with default path
@@ -117,18 +119,18 @@ async def test_api_connection(server: Consult7Server) -> bool:
             # Mask API key for security
             masked = server.api_key[:8] + "..." if len(server.api_key) > 8 else "***"
             print(f"API Key: {masked}")
-    
+
     # Get test model
     test_model = TEST_MODELS.get(server.provider)
     if not test_model:
         print(f"Error: No test model configured for provider '{server.provider}'")
         return False
-    
+
     print(f"Test Model: {test_model}")
-    print(f"Test Mode: fast")
+    print("Test Mode: fast")
     print()
     print("Running test query...")
-    
+
     try:
         # Simple test with minimal content
         result = await consultation_impl(
@@ -140,19 +142,19 @@ async def test_api_connection(server: Consult7Server) -> bool:
             api_key=server.api_key,
             output_file=None,
         )
-        
+
         # Check if result contains error
         if result.startswith("Error:"):
             print()
             print("[FAILED] Test FAILED")
             print(result)
             return False
-        
+
         print()
         print("[PASSED] Test PASSED")
         print(f"Response preview: {result[:200]}...")
         return True
-        
+
     except Exception as e:
         print()
         print("[FAILED] Test FAILED")
@@ -160,24 +162,124 @@ async def test_api_connection(server: Consult7Server) -> bool:
         return False
 
 
+def detect_consultation_mode(
+    files: list[str],
+    db_queries: Optional[list[str]],
+    db_dsn: Optional[str]
+) -> str:
+    """Detect consultation mode based on provided parameters.
+    
+    Args:
+        files: List of file patterns
+        db_queries: Optional database queries
+        db_dsn: Optional database DSN
+    
+    Returns:
+        Mode string: "files-only", "database-only", "hybrid", or "invalid"
+    """
+    has_files = files and len(files) > 0
+    has_db_queries = db_queries and len(db_queries) > 0
+    has_db_dsn = db_dsn is not None and db_dsn.strip() != ""
+
+    # Determine mode based on what's provided
+    # Note: We detect mode optimistically, validation will check completeness
+    if has_files and (has_db_queries or has_db_dsn):
+        # Has files + some DB params = trying hybrid mode
+        return "hybrid"
+    elif has_db_queries or has_db_dsn:
+        # Has some DB params (no files) = trying database-only mode
+        return "database-only"
+    elif has_files:
+        # Has only files = files-only mode
+        return "files-only"
+    else:
+        # Nothing provided = invalid
+        return "invalid"
+
+
+def validate_consultation_params(
+    files: list[str],
+    db_queries: Optional[list[str]],
+    db_dsn: Optional[str]
+) -> Optional[str]:
+    """Validate consultation parameters for different modes.
+    
+    Args:
+        files: List of file patterns
+        db_queries: Optional database queries
+        db_dsn: Optional database DSN (can be None to use environment variables)
+    
+    Returns:
+        Error message if validation fails, None if valid
+    """
+    # Detect mode
+    mode = detect_consultation_mode(files, db_queries, db_dsn)
+
+    # Validate based on detected mode
+    if mode == "invalid":
+        return (
+            "Invalid consultation mode: must provide either files, or db_queries, or both\n"
+            "  Hint: Choose one of three consultation modes:\n"
+            "  • Files-only mode: Provide 'files' parameter\n"
+            "  • Database-only mode: Provide 'db_queries' parameter (db_dsn optional, uses env vars if not provided)\n"
+            "  • Hybrid mode: Provide 'files' AND 'db_queries' parameters (db_dsn optional, uses env vars if not provided)\n"
+            "  Example (files-only): files=['/path/to/*.py']\n"
+            "  Example (database-only with DSN): db_queries=['SELECT * FROM users'], db_dsn='mysql://user:pass@host/db'\n"
+            "  Example (database-only with env vars): db_queries=['SELECT * FROM users'] (db_dsn uses environment variables)\n"
+            "  Example (hybrid): files=['/path/*.py'], db_queries=['SELECT...'], db_dsn='mysql://...' or omit db_dsn to use env vars"
+        )
+
+    # Additional validation for database modes
+    # Note: db_dsn is now optional - it can be provided explicitly or fall back to environment variables
+    if mode in ("database-only", "hybrid"):
+        has_db_queries = db_queries and len(db_queries) > 0
+        has_db_dsn = db_dsn is not None and db_dsn.strip() != ""
+
+        # Validate: if db_dsn provided explicitly, db_queries must also be provided
+        if has_db_dsn and not has_db_queries:
+            return (
+                f"Invalid {mode} mode: Missing required parameter 'db_queries'\n"
+                f"  Hint: When using db_dsn, you must also provide db_queries\n"
+                f"  Example: db_queries=[\"SELECT * FROM users LIMIT 10\"]"
+            )
+        
+        # Note: We no longer require db_dsn when db_queries is provided
+        # The system will attempt to use environment variables if db_dsn is None
+        # Runtime error will occur in consultation_impl if neither is available
+
+    return None
+
+
 async def main():
     """Parse command line arguments and run the server."""
     print("DEBUG: main() started", file=sys.stderr, flush=True)
-    
+
     # Simple argument parsing
     args = sys.argv[1:]
     print(f"DEBUG: args={args}", file=sys.stderr, flush=True)
     test_mode = False
+    db_dsn = None
 
-    # Check for --test flag at the end FIRST
-    if args and args[-1] == "--test":
-        test_mode = True
-        args = args[:-1]  # Remove --test from args
+    # Parse optional flags
+    i = 0
+    while i < len(args):
+        if args[i] == "--test":
+            test_mode = True
+            args.pop(i)
+        elif args[i] == "--db-dsn":
+            if i + 1 >= len(args):
+                sys.stderr.write("Error: --db-dsn requires a value\n")
+                sys.exit(EXIT_FAILURE)
+            db_dsn = args[i + 1]
+            args.pop(i)  # Remove --db-dsn
+            args.pop(i)  # Remove DSN value
+        else:
+            i += 1
 
     # Validate arguments
     if len(args) < MIN_ARGS:
         sys.stderr.write("Error: Missing required arguments\n")
-        sys.stderr.write("Usage: consult7 <provider> <api-key-or-oauth-path> [--test]\n")
+        sys.stderr.write("Usage: consult7 <provider> <api-key-or-oauth-path> [--db-dsn <dsn>] [--test]\n")
         sys.stderr.write("\n")
         sys.stderr.write("Providers:\n")
         sys.stderr.write("  openrouter      - OpenRouter API (requires API key)\n")
@@ -189,9 +291,16 @@ async def main():
         sys.stderr.write("  consult7 openrouter sk-or-v1-...\n")
         sys.stderr.write("  consult7 gemini-cli oauth:\n")
         sys.stderr.write("  consult7 qwen-code oauth:\n")
+        sys.stderr.write("  consult7 qwen-code oauth: --db-dsn mysql://root:@host:3306/db\n")
         sys.stderr.write("  consult7 gemini-cli oauth:/custom/path/oauth_creds.json\n")
         sys.stderr.write("  consult7 github-copilot oauth:\n")
         sys.stderr.write("  consult7 openrouter sk-or-v1-... --test\n")
+        sys.stderr.write("\n")
+        sys.stderr.write("Optional Flags:\n")
+        sys.stderr.write("  --db-dsn <dsn>  - Database connection string for hybrid consultation\n")
+        sys.stderr.write("                    Format: protocol://user:pass@host:port/database\n")
+        sys.stderr.write("                    Example: mysql://root:@10.243.230.71:3306/mydb\n")
+        sys.stderr.write("  --test          - Test API connection and exit\n")
         sys.stderr.write("\n")
         sys.stderr.write("GitHub Copilot Setup:\n")
         sys.stderr.write("  1. Authenticate:  consult7 github-copilot oauth: --test\n")
@@ -204,9 +313,9 @@ async def main():
         sys.stderr.write("  - GitHub Copilot: ~/.consult7/github-copilot_oauth_token.enc\n")
         sys.exit(EXIT_FAILURE)
 
-    if len(args) > MIN_ARGS + 1:
-        sys.stderr.write(f"Error: Too many arguments. Expected {MIN_ARGS + 1}, got {len(args)}\n")
-        sys.stderr.write("Usage: consult7 <provider> <api-key-or-oauth-path> [--test]\n")
+    if len(args) > MIN_ARGS:
+        sys.stderr.write(f"Error: Too many arguments\n")
+        sys.stderr.write("Usage: consult7 <provider> <api-key-or-oauth-path> [--db-dsn <dsn>] [--test]\n")
         sys.exit(EXIT_FAILURE)
 
     # Parse provider and api key/oauth path
@@ -227,12 +336,12 @@ async def main():
         sys.exit(EXIT_FAILURE)
 
     # Create server with stored configuration
-    print(f"DEBUG: Creating server - provider={provider}, api_key={api_key}", file=sys.stderr, flush=True)
-    server = Consult7Server("consult7", api_key, provider)
+    print(f"DEBUG: Creating server - provider={provider}, api_key={api_key}, db_dsn={db_dsn}", file=sys.stderr, flush=True)
+    server = Consult7Server("consult7", api_key, provider, db_dsn)
     print("DEBUG: Server created", file=sys.stderr, flush=True)
 
     print("DEBUG: Registering handlers...", file=sys.stderr, flush=True)
-    
+
     @server.list_resources()
     async def list_resources() -> list[types.Resource]:
         """List available resources (none for this server)."""
@@ -283,8 +392,29 @@ async def main():
                             "type": "string",
                             "description": ToolDescriptions.get_output_file_description(),
                         },
+                        "db_queries": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": ToolDescriptions.get_db_queries_description(
+                                has_database_in_dsn=bool(server.db_dsn and server.db_dsn.count('/') >= 3)
+                            ),
+                        },
+                        "db_dsn": {
+                            "type": "string",
+                            "description": ToolDescriptions.get_db_dsn_description(
+                                has_default_dsn=bool(server.db_dsn)
+                            ),
+                        },
+                        "db_timeout": {
+                            "type": "number",
+                            "description": ToolDescriptions.get_db_timeout_description(),
+                        },
+                        "db_max_rows": {
+                            "type": "integer",
+                            "description": ToolDescriptions.get_db_max_rows_description(),
+                        },
                     },
-                    "required": ["files", "query", "model", "mode"],
+                    "required": ["query", "model", "mode"],
                 },
             )
         ]
@@ -295,14 +425,32 @@ async def main():
         print(f"DEBUG: call_tool invoked: {name}", file=sys.stderr, flush=True)
         try:
             if name == "consultation":
+                # Extract parameters
+                files = arguments.get("files", [])
+                db_queries = arguments.get("db_queries")
+                db_dsn = arguments.get("db_dsn")
+                
+                # Use server's db_dsn if not provided in arguments
+                if db_dsn is None and server.db_dsn:
+                    db_dsn = server.db_dsn
+
+                # Validate consultation mode (T018)
+                validation_error = validate_consultation_params(files, db_queries, db_dsn)
+                if validation_error:
+                    return [types.TextContent(type="text", text=f"Error: {validation_error}")]
+
                 result = await consultation_impl(
-                    arguments["files"],
+                    files,
                     arguments["query"],
                     arguments["model"],
                     arguments["mode"],
                     server.provider,
                     server.api_key,
                     arguments.get("output_file"),
+                    db_queries,
+                    db_dsn,
+                    arguments.get("db_timeout"),
+                    arguments.get("db_max_rows"),
                 )
                 return [types.TextContent(type="text", text=result)]
             else:
@@ -332,7 +480,7 @@ async def main():
     # Show startup information
     logger.info("Starting Consult7 MCP Server")
     logger.info(f"Provider: {server.provider}")
-    
+
     # Show API key/OAuth status
     if server.api_key is None:
         if server.provider in ["gemini-cli", "qwen-code", "github-copilot"]:
@@ -350,6 +498,22 @@ async def main():
             logger.info(f"OAuth: Custom path ({server.api_key})")
         else:
             logger.info("API Key: Set")
+
+    # Show database DSN status
+    if server.db_dsn:
+        # Mask password in DSN for security
+        masked_dsn = server.db_dsn
+        if "@" in masked_dsn and "://" in masked_dsn:
+            # Format: protocol://user:pass@host:port/db
+            parts = masked_dsn.split("://", 1)
+            if len(parts) == 2 and "@" in parts[1]:
+                protocol = parts[0]
+                rest = parts[1]
+                auth_host = rest.split("@", 1)
+                if ":" in auth_host[0]:
+                    user = auth_host[0].split(":")[0]
+                    masked_dsn = f"{protocol}://{user}:***@{auth_host[1]}"
+        logger.info(f"Database DSN: {masked_dsn}")
 
     examples = ToolDescriptions.MODEL_EXAMPLES.get(server.provider, [])
     if examples:
@@ -372,6 +536,14 @@ async def main():
         print("DEBUG: Starting MCP stdio server...", file=sys.stderr, flush=True)
         async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
             print("DEBUG: Stdio server created, running server.run()...", file=sys.stderr, flush=True)
+            
+            # Build instructions dynamically based on server configuration
+            instructions = []
+            if server.db_dsn:
+                instructions.append(f"**Database Configuration**: Server has DEFAULT database DSN configured. NEVER provide 'db_dsn' parameter unless user explicitly requests different database.")
+            else:
+                instructions.append(f"**Database Configuration**: Server has NO default database DSN. You MUST provide 'db_dsn' parameter when using database queries.")
+            
             init_options = InitializationOptions(
                 server_name="consult7",
                 server_version=SERVER_VERSION,
@@ -379,6 +551,7 @@ async def main():
                     notification_options=NotificationOptions(),
                     experimental_capabilities={},
                 ),
+                instructions="\n".join(instructions),
             )
             print(f"DEBUG: InitializationOptions created: {init_options}", file=sys.stderr, flush=True)
             await server.run(

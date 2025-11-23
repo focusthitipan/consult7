@@ -73,16 +73,16 @@ class GeminiCliProvider(BaseProvider):
         """Check if current token is valid (proactive check)."""
         if not self.credentials:
             return False
-        
+
         # Check if access_token exists
         if not self.credentials.get("access_token"):
             return False
-        
+
         # Check expiry_date (with 30 second buffer)
         expiry_date = self.credentials.get("expiry_date")
         if not expiry_date:
             return False
-        
+
         # Token is valid if not expired (30s buffer)
         current_time_ms = time.time() * 1000
         return current_time_ms < (expiry_date - 30000)
@@ -104,7 +104,7 @@ class GeminiCliProvider(BaseProvider):
 
             # Store credentials as dict (like kilocode does)
             self.credentials = cred_data
-            
+
             logger.debug(f"OAuth credentials loaded, expires at: {cred_data.get('expiry_date')}")
 
         except Exception as e:
@@ -114,7 +114,7 @@ class GeminiCliProvider(BaseProvider):
         """Refresh OAuth access token manually (similar to kilocode implementation)."""
         if not self.credentials or not self.credentials.get("refresh_token"):
             raise RuntimeError("No refresh token available")
-        
+
         try:
             # Prepare refresh request (using kilocode's public OAuth credentials)
             refresh_data = {
@@ -123,9 +123,9 @@ class GeminiCliProvider(BaseProvider):
                 "refresh_token": self.credentials["refresh_token"],
                 "grant_type": "refresh_token",
             }
-            
+
             logger.info("Refreshing Gemini CLI OAuth token...")
-            
+
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     "https://oauth2.googleapis.com/token",
@@ -133,34 +133,34 @@ class GeminiCliProvider(BaseProvider):
                     headers={"Content-Type": "application/x-www-form-urlencoded"},
                     timeout=30.0,
                 )
-                
+
                 if response.status_code != 200:
                     error_text = response.text[:500]
                     logger.error(f"Token refresh failed: {response.status_code} - {error_text}")
                     raise RuntimeError(f"Token refresh failed: {response.status_code}")
-                
+
                 token_data = response.json()
-                
+
                 if "error" in token_data:
                     raise RuntimeError(f"Token refresh error: {token_data.get('error_description', token_data['error'])}")
-                
+
                 # Update credentials (preserve refresh_token if not returned)
                 self.credentials["access_token"] = token_data["access_token"]
                 self.credentials["token_type"] = token_data.get("token_type", "Bearer")
                 self.credentials["expiry_date"] = int(time.time() * 1000) + (token_data.get("expires_in", 3600) * 1000)
-                
+
                 # Update refresh_token if provided
                 if "refresh_token" in token_data:
                     self.credentials["refresh_token"] = token_data["refresh_token"]
-                
+
                 logger.info("Gemini CLI token refreshed successfully")
-                
+
                 # Save to file
                 if self._oauth_path:
                     with open(self._oauth_path, "w") as f:
                         json.dump(self.credentials, f, indent=2)
                     logger.debug(f"Refreshed credentials saved to {self._oauth_path}")
-                    
+
         except Exception as e:
             logger.error(f"Token refresh failed: {e}")
             raise RuntimeError(
@@ -255,7 +255,7 @@ class GeminiCliProvider(BaseProvider):
         """Call a Code Assist API endpoint."""
         # Proactively ensure authentication before every API call
         await self._ensure_authenticated(self._oauth_path)
-        
+
         if not self.credentials or not self.credentials.get("access_token"):
             raise RuntimeError("OAuth credentials not authenticated after refresh attempt")
 
@@ -350,7 +350,7 @@ class GeminiCliProvider(BaseProvider):
             # Proactively ensure authenticated before any API calls
             await self._ensure_authenticated(oauth_path)
             logger.info("Gemini CLI authentication verified, discovering project ID...")
-            
+
             # Discover project ID (this will also ensure authentication)
             project_id = await self._discover_project_id()
             logger.info(f"Gemini CLI project ID: {project_id}")
@@ -461,7 +461,7 @@ class GeminiCliProvider(BaseProvider):
             error_msg = str(e)
             logger.error(f"Gemini CLI API error: {error_msg}")
             logger.error(f"Error type: {type(e).__name__}")
-            
+
             # Provide more helpful error messages
             if "403" in error_msg:
                 return "", (
@@ -472,7 +472,7 @@ class GeminiCliProvider(BaseProvider):
                     f"3. API permissions issue with your Google account\n\n"
                     f"Original error: {error_msg}"
                 ), None
-            
+
             return "", error_msg, None
 
 

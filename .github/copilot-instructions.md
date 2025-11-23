@@ -7,7 +7,7 @@ Consult7 is an MCP (Model Context Protocol) server enabling AI agents to consult
 
 ## Critical Architecture Patterns
 
-### 1. Multi-Provider Architecture (3 Providers)
+### 1. Multi-Provider Architecture (4 Providers)
 All providers implement `BaseProvider` interface in `providers/base.py`:
 
 ```python
@@ -17,13 +17,14 @@ class BaseProvider(ABC):
                        thinking_mode: bool, thinking_budget: Optional[int])
 ```
 
-**Three registered providers** (in `providers/__init__.py`):
+**Four registered providers** (in `providers/__init__.py`):
 - **openrouter**: 500+ models via API key (production default)
 - **gemini-cli**: Google OAuth (free tier, setup in `docs/GEMINI_CLI_SETUP.md`)
 - **qwen-code**: Alibaba OAuth (code-focused, setup in `docs/QWEN_CODE_SETUP.md`)
+- **github-copilot**: GitHub OAuth (subscription required, setup in `docs/GITHUB_COPILOT_SETUP.md`)
 
-**OAuth path handling** for gemini-cli/qwen-code:
-- `oauth:` → default path (`~/.gemini/oauth_creds.json` or `~/.qwen/oauth_creds.json`)
+**OAuth path handling** for gemini-cli/qwen-code/github-copilot:
+- `oauth:` → default path (`~/.gemini/oauth_creds.json`, `~/.qwen/oauth_creds.json`, or `~/.consult7/github-copilot_oauth_token.enc`)
 - `oauth:/custom/path.json` → custom path
 - In code: `None` = default, string = custom path
 
@@ -95,19 +96,122 @@ errors.append(
 **Single source of truth**: `constants.py`
 - File size limits: `MAX_FILE_SIZE=1MB`, `MAX_TOTAL_SIZE=4MB`
 - API timeouts: `OPENROUTER_TIMEOUT=600s`, `API_FETCH_TIMEOUT=30s`
-- Token safety factor: `TOKEN_SAFETY_FACTOR=0.8` (reserves 20% buffer)
+- Token safety factor: `TOKEN_SAFETY_FACTOR=0.9` (reserves 10% buffer)
 - Thinking token limits in `token_utils.py:THINKING_LIMITS`
+- Database constants: `DB_QUERY_TIMEOUT=30s`, `DB_MAX_ROWS=10,000`, `DB_POOL_SIZE=5`
+
+## Hybrid Consultation: Files + Database (v3.0+)
+
+### Overview
+Consult7 supports **analyzing files and database queries together** in a single consultation. This enables comprehensive analysis of code-database relationships.
+
+### Supported Databases
+- ✅ **MySQL/MariaDB/TiDB**: `mysql://user:pass@host:port/database`
+- ✅ **PostgreSQL/CockroachDB**: `postgresql://user:pass@host:port/database`
+- ✅ **SQLite**: `sqlite:///./path/to/database.db`
+- ✅ **MongoDB**: `mongodb://user:pass@host:port/database`
+
+### Database Adapter Architecture
+All adapters in `src/consult7/database/adapters/` implement `BaseAdapter` interface:
+
+```python
+class BaseAdapter(ABC):
+    @property
+    @abstractmethod
+    def dsn(self) -> str:
+        """Return DSN for logging (format: protocol://[user@]host:port/database)"""
+        pass
+    
+    @abstractmethod
+    def connect(self) -> None:
+        """Establish database connection"""
+        pass
+    
+    @abstractmethod
+    def execute_query(self, query: str) -> List[Dict[str, Any]]:
+        """Execute read-only query and return results"""
+        pass
+    
+    @abstractmethod
+    def format_result(self, results: List[Dict[str, Any]], query: str) -> str:
+        """Format results as readable text"""
+        pass
+```
+
+**Critical adapter patterns:**
+1. **DSN property for logging**: All adapters must implement `@property dsn` returning formatted connection string
+2. **Read-only enforcement**: Queries are validated before execution, write operations blocked
+3. **Consistent logging**: Use `dsn=self.dsn` parameter in `log_query_execution()` calls
+4. **Boolean checks for database objects**: Use `if self.database is None` not `if not self.database` (pymongo objects don't support truthiness)
+5. **Max rows limit**: All queries respect `max_rows` parameter to prevent token overflow
+
+### MongoDB Adapter Specifics
+MongoDB adapter (`mongodb.py`) uses **simplified query parser** for security:
+- ✅ Supports: `collection.find()`, `collection.aggregate()`
+- ❌ Does NOT parse: filter parameters, projections, sort operations
+- Implementation: Always executes `collection.find().limit(max_rows)`
+- Rationale: Avoids `eval()` risks while maintaining read-only safety
+
+### Tool Parameters (Updated)
+**File-only mode (backward compatible):**
+- `files` (required): List of absolute file paths or patterns
+- `query` (required): Analysis question
+- `model` (required): Model name
+- `mode` (required): `fast`, `mid`, or `think`
+
+**Database-only mode:**
+- `db_queries` (required): List of SQL/MongoDB queries (read-only)
+- `db_dsn` (optional): Database connection string (can use environment variables if not provided)
+- `query` (required): Analysis question
+- `model` (required): Model name
+- `mode` (required): `fast`, `mid`, or `think`
+
+**Hybrid mode:**
+- `files` (required): File paths/patterns
+- `db_queries` (required): Database queries
+- `db_dsn` (optional): Database connection string (can use environment variables if not provided)
+- `query` (required): Analysis question
+- `model` (required): Model name
+- `mode` (required): `fast`, `mid`, or `think`
+
+### Token Budget with Database
+Database results are included in token budget calculation:
+
+```python
+# File content tokens
+file_tokens = estimate_tokens(formatted_files)
+
+# Database result tokens
+db_tokens = estimate_tokens(formatted_db_results)
+
+# Total input tokens
+total_input_tokens = file_tokens + db_tokens
+
+# Must fit within: (context_length - thinking_budget - output_reserve) * safety_factor
+```
+
+If combined content exceeds budget, database results are truncated first.
+
+### Test Coverage
+- **Unit tests**: 119 tests (consultation modes, DSN parsing, validation, formatting, token budget)
+- **Integration tests**: 77 tests across 4 databases
+  - MySQL: 19 tests (connection, queries, read-only, formatting, timeouts, edge cases)
+  - PostgreSQL: 19 tests (same coverage as MySQL)
+  - SQLite: 19 tests (in-memory + file-based connections)
+  - MongoDB: 20 tests (including nested docs, unicode, arrays)
+- **Total**: 196/196 tests passing (100%)
 
 ## MCP Server Integration
 `server.py` registers single `consultation` tool with:
-- Required params: `files`, `query`, `model`, `mode`
-- Optional params: `output_file`, `provider`, `api_key`
+- Required params: `query`, `model`, `mode`
+- Optional params: `files`, `output_file`, `db_queries`, `db_dsn`, `db_timeout`, `db_max_rows`
 
 CLI usage:
 ```bash
 consult7 openrouter sk-or-v1-your-key [--test]
 consult7 gemini-cli oauth: [--test]
 consult7 qwen-code oauth: [--test]
+consult7 github-copilot oauth: [--test]
 ```
 
 ## Common Pitfalls
@@ -118,6 +222,7 @@ consult7 qwen-code oauth: [--test]
 4. **Directory patterns invalid** — only file patterns allowed
 5. **Must use absolute paths** — MCP servers run in different working directories
 6. **Test API connection** with `--test` flag during development before integration
+7. **Database DSN is now optional** — can fall back to environment variables (see `consultation.py`)
 
 ## Key Files Reference
 - `server.py`: MCP server setup, CLI arg parsing, provider selection
@@ -125,8 +230,10 @@ consult7 qwen-code oauth: [--test]
 - `file_processor.py`: File discovery and content assembly
 - `token_utils.py`: Token estimation, reasoning budget calculation
 - `constants.py`: All timeouts, limits, URLs (update here, not scattered)
-- `providers/{base,openrouter,gemini_cli,qwen_code}.py`: Provider implementations
+- `providers/{base,openrouter,gemini_cli,qwen_code,github_copilot}.py`: Provider implementations
 - `tool_definitions.py`: Tool schema and model examples (update for UX changes)
+- `database/adapters/{base,mysql,postgresql,sqlite,mongodb}.py`: Database adapter implementations
+- `database/{connection,validation,formatting,token_budget}.py`: Database feature modules
 
 ## Testing & Validation
 ```bash
@@ -137,12 +244,22 @@ pip install -e .
 consult7 openrouter sk-or-v1-your-key --test
 consult7 gemini-cli oauth: --test
 consult7 qwen-code oauth: --test
+consult7 github-copilot oauth: --test
 
-# Run unit tests
-python -m pytest tests/unit/
+# Run all tests (196 tests)
+pytest tests/ -v
 
-# Run integration tests
-python -m pytest tests/integration/
+# Run unit tests only (119 tests)
+pytest tests/unit/ -v
+
+# Run integration tests only (77 tests)
+pytest tests/integration/ -v
+
+# Run specific database tests
+pytest tests/integration/test_mysql_integration.py -v
+pytest tests/integration/test_postgresql_integration.py -v
+pytest tests/integration/test_sqlite_integration.py -v
+pytest tests/integration/test_mongodb_integration.py -v
 ```
 
 ## Development Workflow
@@ -151,3 +268,35 @@ python -m pytest tests/integration/
 3. Test connection: `consult7 <provider> <key> --test`
 4. Validate with integration tests
 5. Check linting: `ruff check .`
+
+## Project Structure
+```
+src/consult7/
+├── __init__.py           # Package initialization
+├── __main__.py           # Entry point
+├── server.py             # MCP server (CLI parsing, tool registration)
+├── consultation.py       # Main orchestration logic
+├── file_processor.py     # File pattern expansion & formatting
+├── token_utils.py        # Token estimation & thinking budgets
+├── constants.py          # Configuration constants
+├── tool_definitions.py   # Tool schema definitions
+├── providers/            # LLM provider implementations
+│   ├── base.py          # BaseProvider interface
+│   ├── openrouter.py    # OpenRouter (500+ models)
+│   ├── gemini_cli.py    # Google Gemini OAuth
+│   ├── qwen_code.py     # Alibaba Qwen OAuth
+│   └── github_copilot.py # GitHub Copilot OAuth
+├── database/             # Database integration (v3.0+)
+│   ├── connection.py    # Connection pooling & DSN parsing
+│   ├── validation.py    # Read-only query validation
+│   ├── formatting.py    # Result formatting for LLMs
+│   └── adapters/        # Database-specific implementations
+│       ├── base.py      # BaseAdapter interface
+│       ├── mysql.py     # MySQL/MariaDB/TiDB
+│       ├── postgresql.py # PostgreSQL/CockroachDB
+│       ├── sqlite.py    # SQLite
+│       └── mongodb.py   # MongoDB
+└── oauth/                # OAuth authentication
+    ├── device_flow.py   # OAuth Device Flow implementation
+    └── token_storage.py # Secure token storage (AES-256-GCM)
+```

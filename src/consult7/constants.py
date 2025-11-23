@@ -57,3 +57,9 @@ TEST_MODELS = {
     "qwen-code": "qwen3-coder-plus",
     "github-copilot": "gpt-4o",
 }
+
+# Database constants
+DB_QUERY_TIMEOUT = 30.0  # 30 seconds default query timeout
+DB_MAX_ROWS = 10_000  # Maximum rows per query result
+DB_POOL_SIZE = 5  # Default connection pool size per DSN
+DB_SUPPORTED_PROTOCOLS = ["mysql", "postgresql", "sqlite", "mongodb"]
