@@ -173,4 +173,5 @@ api-keys.txt
 .specify
 .ruff_cache
 specs/
-.github
+.github/
+analysis/

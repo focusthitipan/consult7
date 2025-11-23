@@ -16,7 +16,7 @@ import asyncio
 import base64
 import hashlib
 import secrets
-from typing import Optional, Tuple
+from typing import Optional
 from urllib.parse import urlencode
 
 import aiohttp

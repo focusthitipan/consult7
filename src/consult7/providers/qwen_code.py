@@ -2,7 +2,6 @@
 
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Optional, Tuple
 import httpx
@@ -12,7 +11,6 @@ from .base import BaseProvider, process_llm_response
 from ..constants import (
     DEFAULT_CONTEXT_LENGTH,
     DEFAULT_OUTPUT_TOKENS,
-    OPENROUTER_TIMEOUT,
 )
 
 logger = logging.getLogger("consult7")
@@ -98,7 +96,7 @@ class QwenCodeProvider(BaseProvider):
         is_valid = time.time() * 1000 < expiry_date - TOKEN_REFRESH_BUFFER_MS
         if not is_valid:
             logger.debug(f"Token expired or expiring soon (expiry: {expiry_date})")
-        
+
         return is_valid
 
     async def _refresh_access_token(self) -> None:
@@ -172,7 +170,7 @@ class QwenCodeProvider(BaseProvider):
                 self.credentials["expiry_date"] = int(
                     (time.time() + token_data.get("expires_in", 3600)) * 1000
                 )
-                
+
                 logger.info("Qwen Code token refreshed successfully")
 
                 # Save to file
@@ -307,8 +305,7 @@ class QwenCodeProvider(BaseProvider):
 
             # Call API with retry logic for 401 errors
             max_retries = 2
-            last_error = None
-            
+
             for attempt in range(max_retries):
                 try:
                     response = await self.client.chat.completions.create(
@@ -320,14 +317,13 @@ class QwenCodeProvider(BaseProvider):
                         stream_options={"include_usage": True},
                     )
                     break  # Success, exit retry loop
-                    
+
                 except Exception as e:
-                    last_error = e
                     error_str = str(e)
-                    
+
                     # Log the error
                     logger.warning(f"API call attempt {attempt + 1} failed: {error_str}")
-                    
+
                     # If 401 and we have retries left, refresh token and retry
                     if "401" in error_str and attempt < max_retries - 1:
                         logger.info("Got 401, forcing token refresh and retrying...")
@@ -335,7 +331,7 @@ class QwenCodeProvider(BaseProvider):
                         self.credentials = None
                         await self._ensure_authenticated(oauth_path)
                         continue
-                    
+
                     # For other errors or last retry, raise
                     if attempt >= max_retries - 1:
                         logger.error(f"API call failed after {max_retries} attempts: {error_str}")
@@ -372,10 +368,8 @@ class QwenCodeProvider(BaseProvider):
                     if hasattr(delta, "reasoning_content") and delta.reasoning_content:
                         reasoning_text += delta.reasoning_content
 
-                # Collect usage
-                if chunk.usage:
-                    input_tokens = chunk.usage.prompt_tokens or 0
-                    output_tokens = chunk.usage.completion_tokens or 0
+                # Collect usage (tokens tracked by API but not used in response)
+                # Usage information available in chunk.usage if needed for monitoring
 
             # Process response
             processed_response = process_llm_response(full_response)
@@ -400,11 +394,11 @@ class QwenCodeProvider(BaseProvider):
             )
             logger.error(error_msg)
             return "", error_msg, None
-            
+
         except Exception as e:
             error_msg = str(e)
             logger.error(f"Qwen Code API error: {error_msg}")
-            
+
             # Provide helpful error messages
             if "401" in error_msg:
                 error_msg = (
@@ -417,5 +411,5 @@ class QwenCodeProvider(BaseProvider):
                     f"API returned non-JSON response. Token may be invalid.\n"
                     f"Please re-authenticate."
                 )
-            
+
             return "", error_msg, None

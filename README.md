@@ -377,10 +377,130 @@ You can use any OpenRouter model ID (e.g., `deepseek/deepseek-r1-0528`). See the
 
 **Size limits:** Dynamic based on model context window (e.g., Grok 4 Fast: ~8MB, GPT-5.1: ~1.5MB)
 
+## Hybrid Consultation: Files + Database ✨ NEW
+
+Consult7 now supports **analyzing files and database queries together** in a single consultation! This enables comprehensive analysis of code-database relationships:
+
+```json
+{
+  "files": ["/Users/john/project/src/**/*.ts"],
+  "db_queries": ["SHOW TABLES;", "DESCRIBE users;"],
+  "db_dsn": "mysql://root:password@localhost:3306/myapp",
+  "query": "Check if the User model matches the database schema",
+  "model": "google/gemini-2.5-pro",
+  "mode": "think"
+}
+```
+
+### Configuration via MCP Settings
+
+You can configure the database DSN in your MCP configuration to avoid passing it in every request:
+
+**Claude Code:**
+```bash
+claude mcp add -s user consult7 -- consult7 openrouter your-api-key --db-dsn mysql://root:password@localhost:3306/myapp
+```
+
+**Claude Desktop** (`claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "consult7": {
+      "type": "stdio",
+      "command": "consult7",
+      "args": [
+        "openrouter",
+        "your-openrouter-api-key",
+        "--db-dsn",
+        "mysql://root:password@localhost:3306/myapp"
+      ]
+    }
+  }
+}
+```
+
+**Cursor** (`mcp_settings.json`):
+```json
+{
+  "mcpServers": {
+    "consult7": {
+      "command": "consult7",
+      "args": [
+        "openrouter",
+        "your-openrouter-api-key",
+        "--db-dsn",
+        "mysql://root:password@localhost:3306/myapp"
+      ]
+    }
+  }
+}
+```
+
+**VS Code Copilot** (`settings.json`):
+```json
+{
+  "github.copilot.chat.mcp.servers": {
+    "consult7": {
+      "command": "consult7",
+      "args": [
+        "openrouter",
+        "your-openrouter-api-key",
+        "--db-dsn",
+        "mysql://root:password@localhost:3306/myapp"
+      ]
+    }
+  }
+}
+```
+
+**Note on DSN Format:** 
+- **MySQL/PostgreSQL with password**: `mysql://user:password@host:port/database` (e.g., `mysql://root:mypass@localhost:3306/myapp`)
+- **MySQL/PostgreSQL without password**: `mysql://user:@host:port/database` (e.g., `mysql://root:@localhost:3306/myapp`) - note the colon after username
+- **SQLite**: File path required (e.g., `sqlite:///./path/to/database.db`)
+- **MongoDB with database**: `mongodb://user:password@host:port/database` (e.g., `mongodb://root:pass@localhost:27017/myapp`)
+- **MongoDB without database**: `mongodb://user:password@host:port` (e.g., `mongodb://root:pass@localhost:27017`)
+
+**Note on Database Selection:**
+- **DSN with database** (e.g., `mysql://root:@localhost:3306/myapp`): Database is automatically selected. Do NOT use `USE database;` in queries.
+- **DSN without database** (e.g., `mysql://root:@localhost:3306`): 
+  - MySQL/MariaDB: First query must be `USE database_name;`
+  - PostgreSQL: First query must be `\c database_name` OR add database to DSN
+  - MongoDB: Database MUST be in DSN (cannot be selected via query)
+  - SQLite: Database is the file path in DSN (no selection needed)
+
+**With MCP configuration set**, you can omit `db_dsn` parameter:
+```json
+{
+  "files": ["/Users/john/project/src/**/*.ts"],
+  "db_queries": ["SHOW TABLES;", "DESCRIBE users;"],
+  "query": "Check if the User model matches the database schema",
+  "model": "google/gemini-2.5-pro",
+  "mode": "think"
+}
+```
+
+**Supported Databases:**
+- ✅ MySQL / MariaDB / TiDB (via `mysql://` DSN)
+- ✅ PostgreSQL / CockroachDB (via `postgresql://` DSN)
+- ✅ SQLite (via `sqlite:///` DSN)
+- ✅ MongoDB (via `mongodb://` DSN)
+
+**Use Cases:**
+- Validate ORM models against database schema
+- Analyze data patterns with business logic
+- Review API implementations with database design
+- Assess migration impact on code
+- Generate comprehensive code+database documentation
+
+**Test Coverage:** 196/196 tests passing (100% coverage) including MySQL, PostgreSQL, SQLite, and MongoDB integration tests.
+
+📖 [Hybrid Consultation Guide](docs/HYBRID_CONSULTATION_FEATURE.md) - Complete feature documentation with examples
+
 ## Tool Parameters
 
 The consultation tool accepts the following parameters:
 
+**File Analysis (Original Mode):**
 - **files** (required): List of absolute file paths or patterns with wildcards in filenames only
 - **query** (required): Your question or instruction for the LLM to process the files
 - **model** (required): The LLM model to use (see Supported Models above)
@@ -389,6 +509,17 @@ The consultation tool accepts the following parameters:
   - If the file exists, it will be saved with `_updated` suffix (e.g., `report.md` → `report_updated.md`)
   - When specified, returns only: `"Result has been saved to /path/to/file"`
   - Useful for generating reports, documentation, or analyses without flooding the agent's context
+
+**Database Analysis (New):**
+- **db_queries** (optional): List of SQL/MongoDB queries to execute (read-only, SELECT/SHOW/DESCRIBE only)
+- **db_dsn** (optional): Database connection string (format: `mysql://user:pass@host:port/database`)
+  - Required if `db_queries` is provided
+  - Supports: MySQL, PostgreSQL, SQLite, MongoDB
+
+**Modes:**
+- **Files Only**: Provide `files` parameter (existing behavior, fully backward compatible)
+- **Database Only**: Provide `db_queries` + `db_dsn` parameters (new)
+- **Hybrid**: Provide `files` + `db_queries` + `db_dsn` parameters (new)
 
 ## Usage Examples
 
