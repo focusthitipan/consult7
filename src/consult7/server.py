@@ -132,33 +132,52 @@ async def test_api_connection(server: Consult7Server) -> bool:
     print("Running test query...")
 
     try:
-        # Simple test with minimal content
-        result = await consultation_impl(
-            files=[],  # No files for test
-            query="Say 'Connection successful' if you can read this.",
-            model=test_model,
-            mode="fast",
-            provider=server.provider,
+        # Create a simple test file content
+        test_content = "# Test Python file\ndef hello():\n    print('Hello, World!')\n"
+        
+        # For test mode, we bypass the validation by calling the provider directly
+        # This ensures we can test the API connection without hitting the validation error
+        from .providers import PROVIDERS
+        
+        provider_instance = PROVIDERS[server.provider]
+        
+        # Call the provider directly with test query
+        result = await provider_instance.call_llm(
+            content=test_content,
+            query="Analyze this code and say 'Connection successful'.",
+            model_name=test_model,
             api_key=server.api_key,
-            output_file=None,
+            thinking_mode=False,
+            thinking_budget=None,
         )
-
-        # Check if result contains error
-        if result.startswith("Error:"):
+        
+        # Providers return (response, error_message, thinking_used) tuple
+        if isinstance(result, tuple) and len(result) >= 2:
+            response = result[0]
+            error_message = result[1]
+        else:
+            response = str(result)
+            error_message = None
+        
+        if error_message:
             print()
             print("[FAILED] Test FAILED")
-            print(result)
+            print(f"Error: {error_message}")
             return False
 
         print()
         print("[PASSED] Test PASSED")
-        print(f"Response preview: {result[:200]}...")
+        if response:
+            preview = response[:200] if len(response) > 200 else response
+            print(f"Response: {preview}")
         return True
 
     except Exception as e:
         print()
         print("[FAILED] Test FAILED")
         print(f"Error: {e}")
+        import traceback
+        logger.debug(f"Test error traceback: {traceback.format_exc()}")
         return False
 
 

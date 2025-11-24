@@ -674,23 +674,6 @@ To remove consult7 from Claude Code:
 claude mcp remove consult7 -s user
 ```
 
-## Version History
-
-### v3.0.0
-- Removed Google and OpenAI direct providers - now OpenRouter only
-- Removed `|thinking` suffix - use `mode` parameter instead (now required)
-- Clean `mode` parameter API: `fast`, `mid`, `think`
-- Simplified CLI from `consult7 <provider> <key>` to `consult7 <key>`
-- Better MCP integration with enum validation for modes
-- Dynamic file size limits based on model context window
-
-### v2.1.0
-- Added `output_file` parameter to save responses to files
-
-### v2.0.0
-- New file list interface with simplified validation
-- Reduced file size limits to realistic values
-
 ## License
 
 MIT
