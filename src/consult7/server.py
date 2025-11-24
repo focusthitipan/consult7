@@ -184,32 +184,33 @@ async def test_api_connection(server: Consult7Server) -> bool:
 def detect_consultation_mode(
     files: list[str],
     db_queries: Optional[list[str]],
-    db_dsn: Optional[str]
+    db_dsn_arg: Optional[str]
 ) -> str:
     """Detect consultation mode based on provided parameters.
     
     Args:
         files: List of file patterns
         db_queries: Optional database queries
-        db_dsn: Optional database DSN
+        db_dsn_arg: Optional database DSN from arguments (NOT from server config)
     
     Returns:
         Mode string: "files-only", "database-only", "hybrid", or "invalid"
     """
     has_files = files and len(files) > 0
     has_db_queries = db_queries and len(db_queries) > 0
-    has_db_dsn = db_dsn is not None and db_dsn.strip() != ""
+    # CRITICAL: Only consider db_dsn_arg (explicit user parameter), not server.db_dsn
+    has_db_dsn_arg = db_dsn_arg is not None and db_dsn_arg.strip() != ""
 
     # Determine mode based on what's provided
-    # Note: We detect mode optimistically, validation will check completeness
-    if has_files and (has_db_queries or has_db_dsn):
-        # Has files + some DB params = trying hybrid mode
+    # Key: db_queries is the primary indicator of database mode, not db_dsn
+    if has_files and has_db_queries:
+        # Has files + db_queries = hybrid mode
         return "hybrid"
-    elif has_db_queries or has_db_dsn:
-        # Has some DB params (no files) = trying database-only mode
+    elif has_db_queries:
+        # Has db_queries (no files) = database-only mode
         return "database-only"
     elif has_files:
-        # Has only files = files-only mode
+        # Has only files = files-only mode (even if server has default db_dsn)
         return "files-only"
     else:
         # Nothing provided = invalid
@@ -219,20 +220,20 @@ def detect_consultation_mode(
 def validate_consultation_params(
     files: list[str],
     db_queries: Optional[list[str]],
-    db_dsn: Optional[str]
+    db_dsn_arg: Optional[str]
 ) -> Optional[str]:
     """Validate consultation parameters for different modes.
     
     Args:
         files: List of file patterns
         db_queries: Optional database queries
-        db_dsn: Optional database DSN (can be None to use environment variables)
+        db_dsn_arg: Optional database DSN from arguments (NOT from server config)
     
     Returns:
         Error message if validation fails, None if valid
     """
-    # Detect mode
-    mode = detect_consultation_mode(files, db_queries, db_dsn)
+    # Detect mode based on EXPLICIT parameters only (ignore server.db_dsn)
+    mode = detect_consultation_mode(files, db_queries, db_dsn_arg)
 
     # Validate based on detected mode
     if mode == "invalid":
@@ -249,22 +250,18 @@ def validate_consultation_params(
         )
 
     # Additional validation for database modes
-    # Note: db_dsn is now optional - it can be provided explicitly or fall back to environment variables
+    # Key: Only validate if user explicitly provided db_dsn_arg without db_queries
     if mode in ("database-only", "hybrid"):
         has_db_queries = db_queries and len(db_queries) > 0
-        has_db_dsn = db_dsn is not None and db_dsn.strip() != ""
+        has_db_dsn_arg_explicit = db_dsn_arg is not None and db_dsn_arg.strip() != ""
 
-        # Validate: if db_dsn provided explicitly, db_queries must also be provided
-        if has_db_dsn and not has_db_queries:
+        # Validate: if user explicitly provided db_dsn_arg, they must also provide db_queries
+        if has_db_dsn_arg_explicit and not has_db_queries:
             return (
                 f"Invalid {mode} mode: Missing required parameter 'db_queries'\n"
                 f"  Hint: When using db_dsn, you must also provide db_queries\n"
                 f"  Example: db_queries=[\"SELECT * FROM users LIMIT 10\"]"
             )
-        
-        # Note: We no longer require db_dsn when db_queries is provided
-        # The system will attempt to use environment variables if db_dsn is None
-        # Runtime error will occur in consultation_impl if neither is available
 
     return None
 
@@ -447,16 +444,16 @@ async def main():
                 # Extract parameters
                 files = arguments.get("files", [])
                 db_queries = arguments.get("db_queries")
-                db_dsn = arguments.get("db_dsn")
+                db_dsn_arg = arguments.get("db_dsn")  # Explicit user parameter
                 
-                # Use server's db_dsn if not provided in arguments
-                if db_dsn is None and server.db_dsn:
-                    db_dsn = server.db_dsn
-
-                # Validate consultation mode (T018)
-                validation_error = validate_consultation_params(files, db_queries, db_dsn)
+                # Validate consultation mode using EXPLICIT parameters only
+                # This prevents server.db_dsn from triggering validation errors in files-only mode
+                validation_error = validate_consultation_params(files, db_queries, db_dsn_arg)
                 if validation_error:
                     return [types.TextContent(type="text", text=f"Error: {validation_error}")]
+
+                # AFTER validation, merge with server's db_dsn if not provided
+                db_dsn_final = db_dsn_arg if db_dsn_arg is not None else server.db_dsn
 
                 result = await consultation_impl(
                     files,
@@ -467,7 +464,7 @@ async def main():
                     server.api_key,
                     arguments.get("output_file"),
                     db_queries,
-                    db_dsn,
+                    db_dsn_final,  # Use merged DSN
                     arguments.get("db_timeout"),
                     arguments.get("db_max_rows"),
                 )
